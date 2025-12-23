@@ -2,8 +2,9 @@
 
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { Trophy, Wallet, Users, Zap, Shield, ArrowRight } from "lucide-react"
+import { Trophy, Wallet, Users, Zap, Shield, ArrowRight, Gamepad2 } from "lucide-react"
 import { useWallet } from "@/components/wallet-provider"
+import Link from "next/link"
 
 export default function HomePage() {
   const { publicKey, connected, connecting, connect, disconnect } = useWallet()
@@ -21,9 +22,12 @@ export default function HomePage() {
               <span className="text-xl font-bold">Sol Arena</span>
             </div>
             <div className="hidden md:flex items-center gap-8">
-              <a href="#tournaments" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+              <Link
+                href="/tournaments"
+                className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
                 Tournaments
-              </a>
+              </Link>
               <a href="#how-it-works" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                 How It Works
               </a>
@@ -79,8 +83,8 @@ export default function HomePage() {
                     <ArrowRight className="w-4 h-4 ml-2" />
                   </Button>
                 )}
-                <Button size="lg" variant="outline" className="text-base bg-transparent">
-                  View Tournaments
+                <Button size="lg" variant="outline" className="text-base bg-transparent" asChild>
+                  <Link href="/tournaments">View Tournaments</Link>
                 </Button>
               </div>
 
@@ -134,6 +138,52 @@ export default function HomePage() {
                 </Card>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Available Games */}
+      <section className="py-20 px-4 bg-secondary/30">
+        <div className="container mx-auto max-w-6xl">
+          <div className="text-center space-y-4 mb-12">
+            <h2 className="text-4xl lg:text-5xl font-bold text-balance">Available Games</h2>
+            <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+              Compete in your favorite games and prove you're the best
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+            <Card className="p-8 space-y-4 bg-card border-2 border-border hover:border-primary/50 transition-all hover:scale-105">
+              <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center">
+                <Gamepad2 className="w-8 h-8 text-primary" />
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-2xl font-bold">Fortnite</h3>
+                <p className="text-muted-foreground leading-relaxed">
+                  Battle Royale tournaments with instant SOL rewards
+                </p>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Users className="w-4 h-4" />
+                <span>1,248 active players</span>
+              </div>
+            </Card>
+
+            <Card className="p-8 space-y-4 bg-card border-2 border-border hover:border-primary/50 transition-all hover:scale-105">
+              <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center">
+                <Gamepad2 className="w-8 h-8 text-primary" />
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-2xl font-bold">The Finals</h3>
+                <p className="text-muted-foreground leading-relaxed">
+                  Intense team-based competitions for the ultimate prize
+                </p>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Users className="w-4 h-4" />
+                <span>842 active players</span>
+              </div>
+            </Card>
           </div>
         </div>
       </section>
@@ -295,8 +345,8 @@ export default function HomePage() {
                     {connecting ? "Connecting..." : "Connect Wallet"}
                   </Button>
                 )}
-                <Button size="lg" variant="outline" className="text-base bg-transparent">
-                  View Live Tournaments
+                <Button size="lg" variant="outline" className="text-base bg-transparent" asChild>
+                  <Link href="/tournaments">View Live Tournaments</Link>
                 </Button>
               </div>
             </div>
