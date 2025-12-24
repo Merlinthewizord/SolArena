@@ -2,15 +2,13 @@
 
 import type React from "react"
 import { Navigation } from "@/components/navigation"
-import VideoBackground from "@/components/video-background"
 
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Trophy, Wallet, Users, Calendar, Plus, Loader2, X } from "lucide-react"
+import { Trophy, Wallet, Users, Calendar, Loader2, X } from "lucide-react"
 import { useWallet } from "@/components/wallet-provider"
 import { useToast } from "@/hooks/use-toast"
 import { SolArenaProgram } from "@/lib/solana-program"
@@ -33,6 +31,7 @@ interface Tournament {
     url: string
     state: string
   }
+  startDate: string
 }
 
 export default function TournamentsPage() {
@@ -50,6 +49,7 @@ export default function TournamentsPage() {
   })
 
   const [showRegistrationForm, setShowRegistrationForm] = useState(false)
+  const [showCreateForm, setShowCreateForm] = useState(false)
   const [solanaProgram, setSolanaProgram] = useState<SolArenaProgram | null>(null)
   const [registering, setRegistering] = useState<string | null>(null)
 
@@ -57,30 +57,27 @@ export default function TournamentsPage() {
   const [tournamentName, setTournamentName] = useState("")
   const [game, setGame] = useState("")
   const [entryFee, setEntryFee] = useState("0.1")
+  const [tournamentDate, setTournamentDate] = useState("")
+  const [tournamentTime, setTournamentTime] = useState("")
+  const [maxParticipants, setMaxParticipants] = useState("32")
 
-  const [showCreateForm, setShowCreateForm] = useState(false) // Declared the missing variable
+  const [registrationData, setRegistrationData] = useState({
+    inGameUsername: "",
+    discordHandle: "",
+    teamName: "",
+  })
 
   useEffect(() => {
-    if (connected && getProvider()) {
-      const provider = getProvider()
-      if (provider && provider.publicKey) {
-        const program = new SolArenaProgram()
-        program
-          .initialize(provider)
-          .then(() => {
-            setSolanaProgram(program)
-            console.log("[v0] Solana program initialized")
-          })
-          .catch((error) => {
-            console.error("[v0] Error initializing Solana program:", error)
-          })
-      }
+    if (connected) {
+      fetchTournaments()
+      const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com"
+      const program = new SolArenaProgram(rpcUrl)
+      program.initialize({ publicKey }).then(() => {
+        setSolanaProgram(program)
+        console.log("[v0] SolArena program initialized with wallet:", publicKey?.toString())
+      })
     }
-  }, [connected, getProvider])
-
-  useEffect(() => {
-    fetchTournaments()
-  }, [])
+  }, [connected, publicKey])
 
   const createTournament = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -94,10 +91,27 @@ export default function TournamentsPage() {
       return
     }
 
+    const provider = getProvider()
+    if (!provider || !provider.publicKey) {
+      toast({
+        title: "Wallet error",
+        description: "Could not get wallet address",
+        variant: "destructive",
+      })
+      return
+    }
+
     setIsCreating(true)
 
     try {
-      console.log("[v0] Creating tournament:", { tournamentName, game, entryFee })
+      console.log("[v0] Creating tournament:", {
+        tournamentName,
+        game,
+        entryFee,
+        tournamentDate,
+        tournamentTime,
+        maxParticipants,
+      })
 
       const challongeResponse = await fetch("/api/tournaments", {
         method: "POST",
@@ -107,7 +121,10 @@ export default function TournamentsPage() {
         body: JSON.stringify({
           name: tournamentName,
           game: game,
-          entryFee: entryFee,
+          entryFee: Number.parseFloat(entryFee),
+          maxParticipants: Number.parseInt(maxParticipants),
+          startDate: tournamentDate && tournamentTime ? `${tournamentDate}T${tournamentTime}` : undefined,
+          walletAddress: provider.publicKey.toString(),
         }),
       })
 
@@ -117,20 +134,19 @@ export default function TournamentsPage() {
       }
 
       const challongeData = await challongeResponse.json()
-      const tournamentId = challongeData.tournament.id.toString()
-      console.log("[v0] Challonge tournament created:", tournamentId)
+      console.log("[v0] Tournament created successfully:", challongeData)
 
       if (solanaProgram) {
         try {
-          const provider = getProvider()
-          if (provider) {
-            const entryFeeInLamports = Number.parseFloat(entryFee) * LAMPORTS_PER_SOL
-            const result = await solanaProgram.createTournament(provider, tournamentId, entryFeeInLamports)
-            console.log("[v0] On-chain tournament created:", result)
-          }
+          const entryFeeInLamports = Number.parseFloat(entryFee) * LAMPORTS_PER_SOL
+          const result = await solanaProgram.createTournament(
+            provider,
+            challongeData.tournament.challonge_id,
+            entryFeeInLamports,
+          )
+          console.log("[v0] On-chain tournament created:", result)
         } catch (blockchainError) {
           console.error("[v0] Blockchain error (non-critical):", blockchainError)
-          // Don't fail the entire creation if blockchain part fails
         }
       }
 
@@ -143,9 +159,13 @@ export default function TournamentsPage() {
       setTournamentName("")
       setGame("")
       setEntryFee("0.1")
+      setTournamentDate("")
+      setTournamentTime("")
+      setMaxParticipants("32")
       setShowCreateForm(false)
 
-      await new Promise((resolve) => setTimeout(resolve, 1500))
+      // Refresh tournaments list
+      await new Promise((resolve) => setTimeout(resolve, 1000))
       await fetchTournaments()
     } catch (error) {
       console.error("[v0] Error creating tournament:", error)
@@ -294,7 +314,7 @@ export default function TournamentsPage() {
   const fetchTournaments = async () => {
     try {
       console.log("[v0] Fetching tournaments...")
-      const response = await fetch("/api/tournaments?t=" + Date.now())
+      const response = await fetch("/api/tournaments")
       const data = await response.json()
       console.log("[v0] Tournaments fetched:", data)
 
@@ -304,16 +324,13 @@ export default function TournamentsPage() {
         id: t.id,
         name: t.name,
         game: t.game,
-        entryFee: t.entry_fee,
-        prizePool: t.prize_pool,
-        maxParticipants: t.max_participants,
-        currentParticipants: t.current_participants,
+        entryFee: t.entryFee, // Use camelCase from API
+        prizePool: t.prizePool, // Use camelCase from API
+        maxParticipants: t.maxParticipants, // Use camelCase from API
+        currentParticipants: t.currentParticipants, // Use camelCase from API
         status: t.status,
-        challonge: {
-          id: t.challonge_id,
-          url: t.challonge_url,
-          state: t.status === "active" ? "underway" : t.status === "pending" ? "pending" : "complete",
-        },
+        challonge: t.challonge, // Use nested object directly from API
+        startDate: t.startDate,
       }))
 
       setTournaments(transformedTournaments)
@@ -358,364 +375,413 @@ export default function TournamentsPage() {
     }
   }
 
-  // Form state
-  const [registrationData, setRegistrationData] = useState({
-    inGameUsername: "",
-    discordHandle: "",
-    teamName: "",
-  })
+  const handleViewTournament = (tournament: Tournament) => {
+    if (tournament.status !== "completed" && !connected) {
+      alert("Please connect your wallet to join this tournament")
+      return
+    }
+    // Implement logic to view tournament details or results
+    console.log("View tournament:", tournament)
+  }
 
   return (
-    <div className="min-h-screen">
-      <VideoBackground />
-
+    <div className="min-h-screen bg-background">
       <Navigation />
 
-      {/* Hero Section */}
-      <section className="pt-32 pb-12 px-4">
-        <div className="container mx-auto max-w-6xl">
-          <div className="flex items-center justify-between mb-8">
-            <div className="space-y-1">
-              <h1 className="text-4xl font-bold tracking-tight">Tournaments</h1>
-              <p className="text-muted-foreground">Compete in live tournaments and win SOL prizes</p>
+      {/* Action Buttons */}
+      <main className="container mx-auto px-4 py-8 pt-20 space-y-8">
+        {/* Header */}
+        <div className="text-center space-y-4">
+          <h1 className="text-4xl md:text-5xl font-bold">
+            <span className="bg-gradient-to-r from-primary via-red-500 to-orange-500 bg-clip-text text-transparent">
+              Tournaments
+            </span>
+          </h1>
+          <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
+            Compete in high-stakes tournaments and climb the leaderboards
+          </p>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex flex-wrap gap-4 justify-center">
+          <Button
+            size="lg"
+            onClick={() => setShowCreateForm(true)}
+            disabled={!connected}
+            className="bg-gradient-to-r from-primary to-orange-500 hover:opacity-90"
+          >
+            <Trophy className="w-5 h-5 mr-2" />
+            Create Tournament
+          </Button>
+          {!connected && (
+            <p className="text-sm text-muted-foreground w-full text-center">
+              Connect your wallet to create or join tournaments
+            </p>
+          )}
+        </div>
+
+        {/* Tournaments Grid */}
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {tournaments.map((tournament) => (
+            <Card
+              key={tournament.id}
+              className="border-2 border-border/50 hover:border-primary/50 transition-all duration-300"
+            >
+              <CardHeader className="space-y-4">
+                <div className="flex items-start justify-between">
+                  <div className="space-y-1">
+                    <CardTitle className="text-xl">{tournament.name}</CardTitle>
+                    <p className="text-sm text-muted-foreground">{tournament.game}</p>
+                  </div>
+                  <span
+                    className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                      tournament.status === "pending"
+                        ? "bg-yellow-500/10 text-yellow-500 border border-yellow-500/20"
+                        : tournament.status === "in_progress"
+                          ? "bg-blue-500/10 text-blue-500 border border-blue-500/20"
+                          : "bg-green-500/10 text-green-500 border border-green-500/20"
+                    }`}
+                  >
+                    {tournament.status.replace("_", " ")}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-4 text-sm">
+                  <div className="flex items-center gap-1">
+                    <Users className="w-4 h-4 text-muted-foreground" />
+                    <span>
+                      {tournament.currentParticipants}/{tournament.maxParticipants}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Calendar className="w-4 h-4 text-muted-foreground" />
+                    <span>{new Date(tournament.startDate).toLocaleDateString()}</span>
+                  </div>
+                </div>
+              </CardHeader>
+
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Entry Fee</span>
+                  <span className="font-bold text-primary">{tournament.entryFee} SOL</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Prize Pool</span>
+                  <span className="font-bold text-green-500">{tournament.prizePool} SOL</span>
+                </div>
+
+                <Button
+                  className="w-full bg-gradient-to-r from-primary to-orange-500 hover:opacity-90"
+                  onClick={() => handleViewTournament(tournament)}
+                >
+                  <Trophy className="w-4 h-4 mr-2" />
+                  {tournament.status === "completed" ? "View Results" : "Join Tournament"}
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {tournaments.length === 0 && (
+          <Card className="p-8 text-center space-y-4 border-2 border-border">
+            <div className="w-16 h-16 mx-auto bg-primary/10 rounded-2xl flex items-center justify-center">
+              <Trophy className="w-8 h-8 text-primary" />
             </div>
-            {console.log("[v0] Create Tournament Button State:", { connected, showJoinModal })}
+            <div className="space-y-2">
+              <h3 className="text-xl font-bold">No tournaments available</h3>
+              <p className="text-muted-foreground">Be the first to create a tournament</p>
+            </div>
             {connected && (
-              <Button
-                size="lg"
-                onClick={() => {
-                  console.log("[v0] Create Tournament button clicked")
-                  setShowJoinModal(!showJoinModal)
-                }}
-              >
-                <Plus className="w-5 h-5 mr-2" />
+              <Button size="lg" onClick={() => setShowCreateForm(true)}>
+                <Trophy className="w-5 h-5 mr-2" />
                 Create Tournament
               </Button>
             )}
-          </div>
+          </Card>
+        )}
+      </main>
 
-          {showRegistrationForm && selectedTournament && (
-            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-              <Card className="w-full max-w-2xl p-6 border-2 border-primary/20 relative">
-                <button
+      {/* Create Tournament Form */}
+      {showCreateForm && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <Card className="w-full max-w-2xl p-6 border-2 border-primary/20 relative max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={() => {
+                setShowCreateForm(false)
+                setTournamentName("")
+                setGame("")
+                setEntryFee("0.1")
+                setTournamentDate("")
+                setTournamentTime("")
+                setMaxParticipants("32")
+              }}
+              className="absolute top-4 right-4 p-2 hover:bg-muted rounded-lg transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <form onSubmit={createTournament} className="space-y-6">
+              <div className="space-y-2">
+                <h3 className="text-2xl font-bold">Create Tournament</h3>
+                <p className="text-muted-foreground">Set up your tournament and invite players to compete</p>
+              </div>
+
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="tournamentName">
+                    Tournament Name <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="tournamentName"
+                    placeholder="Summer Championship 2024"
+                    value={tournamentName}
+                    onChange={(e) => setTournamentName(e.target.value)}
+                    required
+                  />
+                  <p className="text-xs text-muted-foreground">Choose a memorable name for your tournament</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="game">
+                    Game <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="game"
+                    placeholder="Counter-Strike 2, Valorant, etc."
+                    value={game}
+                    onChange={(e) => setGame(e.target.value)}
+                    required
+                  />
+                  <p className="text-xs text-muted-foreground">What game will this tournament be for?</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="tournamentDate">
+                      Start Date <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="tournamentDate"
+                      type="date"
+                      value={tournamentDate}
+                      onChange={(e) => setTournamentDate(e.target.value)}
+                      min={new Date().toISOString().split("T")[0]}
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="tournamentTime">
+                      Start Time <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="tournamentTime"
+                      type="time"
+                      value={tournamentTime}
+                      onChange={(e) => setTournamentTime(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="entryFee">
+                      Entry Fee (SOL) <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="entryFee"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="0.1"
+                      value={entryFee}
+                      onChange={(e) => setEntryFee(e.target.value)}
+                      required
+                    />
+                    <p className="text-xs text-muted-foreground">Amount each player pays to enter</p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="maxParticipants">
+                      Max Participants <span className="text-red-500">*</span>
+                    </Label>
+                    <select
+                      id="maxParticipants"
+                      value={maxParticipants}
+                      onChange={(e) => setMaxParticipants(e.target.value)}
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      required
+                    >
+                      <option value="8">8 Players</option>
+                      <option value="16">16 Players</option>
+                      <option value="32">32 Players</option>
+                      <option value="64">64 Players</option>
+                      <option value="128">128 Players</option>
+                    </select>
+                    <p className="text-xs text-muted-foreground">Maximum number of players allowed</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t pt-4 space-y-4">
+                <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+                  <h4 className="font-semibold text-sm">Tournament Summary</h4>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Entry Fee</span>
+                    <span className="font-bold">{entryFee} SOL</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Max Prize Pool</span>
+                    <span className="font-bold text-primary">
+                      {(Number.parseFloat(entryFee || "0") * Number.parseInt(maxParticipants || "0")).toFixed(2)} SOL
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Max Players</span>
+                    <span className="font-bold">{maxParticipants} players</span>
+                  </div>
+                  <div className="text-xs text-muted-foreground pt-2 border-t border-border">
+                    Prize Distribution: 1st (60%) • 2nd (30%) • 3rd (10%)
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-4">
+                <Button type="submit" disabled={isCreating} className="flex-1">
+                  {isCreating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Creating Tournament...
+                    </>
+                  ) : (
+                    <>
+                      <Trophy className="w-4 h-4 mr-2" />
+                      Create Tournament
+                    </>
+                  )}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setShowCreateForm(false)
+                    setTournamentName("")
+                    setGame("")
+                    setEntryFee("0.1")
+                    setTournamentDate("")
+                    setTournamentTime("")
+                    setMaxParticipants("32")
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          </Card>
+        </div>
+      )}
+
+      {/* Registration Form */}
+      {showRegistrationForm && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <Card className="w-full max-w-2xl p-6 border-2 border-primary/20 relative">
+            <button
+              onClick={() => {
+                setShowRegistrationForm(false)
+                setSelectedTournament(null)
+                setRegistrationData({ inGameUsername: "", discordHandle: "", teamName: "" })
+              }}
+              className="absolute top-4 right-4 p-2 hover:bg-muted rounded-lg transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <form onSubmit={submitRegistration} className="space-y-6">
+              <div className="space-y-2">
+                <h3 className="text-2xl font-bold">Register for Tournament</h3>
+                <p className="text-muted-foreground">{selectedTournament?.name}</p>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Entry Fee</span>
+                  <span className="font-bold">{selectedTournament?.entryFee} SOL</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Current Prize Pool</span>
+                  <span className="font-bold text-primary">~{selectedTournament?.prizePool.toFixed(2)} SOL</span>
+                </div>
+                <div className="text-xs text-muted-foreground pt-2 border-t border-border">
+                  Prize Distribution: 1st (60%) • 2nd (30%) • 3rd (10%)
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="inGameUsername">
+                    In-Game Username <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="inGameUsername"
+                    placeholder="YourGameTag123"
+                    value={registrationData.inGameUsername}
+                    onChange={(e) => setRegistrationData({ ...registrationData, inGameUsername: e.target.value })}
+                    required
+                  />
+                  <p className="text-xs text-muted-foreground">Your username in {selectedTournament?.game}</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="discordHandle">Discord Handle</Label>
+                  <Input
+                    id="discordHandle"
+                    placeholder="username#1234"
+                    value={registrationData.discordHandle}
+                    onChange={(e) => setRegistrationData({ ...registrationData, discordHandle: e.target.value })}
+                  />
+                  <p className="text-xs text-muted-foreground">Optional - for tournament communication</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="teamName">Team Name (if applicable)</Label>
+                  <Input
+                    id="teamName"
+                    placeholder="My Squad"
+                    value={registrationData.teamName}
+                    onChange={(e) => setRegistrationData({ ...registrationData, teamName: e.target.value })}
+                  />
+                  <p className="text-xs text-muted-foreground">Leave blank if playing solo</p>
+                </div>
+              </div>
+
+              <div className="flex gap-4">
+                <Button type="submit" disabled={registering !== null} className="flex-1">
+                  {registering ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Processing Payment...
+                    </>
+                  ) : (
+                    <>
+                      <Wallet className="w-4 h-4 mr-2" />
+                      Pay & Register
+                    </>
+                  )}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
                   onClick={() => {
                     setShowRegistrationForm(false)
                     setSelectedTournament(null)
                     setRegistrationData({ inGameUsername: "", discordHandle: "", teamName: "" })
                   }}
-                  className="absolute top-4 right-4 p-2 hover:bg-muted rounded-lg transition-colors"
                 >
-                  <X className="w-5 h-5" />
-                </button>
-
-                <form onSubmit={submitRegistration} className="space-y-6">
-                  <div className="space-y-2">
-                    <h3 className="text-2xl font-bold">Register for Tournament</h3>
-                    <p className="text-muted-foreground">{selectedTournament.name}</p>
-                    <div className="flex items-center gap-4 text-sm">
-                      <span className="text-primary font-bold">Entry Fee: {selectedTournament.entryFee} SOL</span>
-                      <span className="text-muted-foreground">•</span>
-                      <span className="text-muted-foreground">
-                        {selectedTournament.currentParticipants} players registered
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="inGameUsername">
-                        In-Game Username <span className="text-red-500">*</span>
-                      </Label>
-                      <Input
-                        id="inGameUsername"
-                        placeholder="YourGameTag123"
-                        value={registrationData.inGameUsername}
-                        onChange={(e) => setRegistrationData({ ...registrationData, inGameUsername: e.target.value })}
-                        required
-                      />
-                      <p className="text-xs text-muted-foreground">Your username in {selectedTournament.game}</p>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="discordHandle">Discord Handle</Label>
-                      <Input
-                        id="discordHandle"
-                        placeholder="username#1234"
-                        value={registrationData.discordHandle}
-                        onChange={(e) => setRegistrationData({ ...registrationData, discordHandle: e.target.value })}
-                      />
-                      <p className="text-xs text-muted-foreground">Optional - for tournament communication</p>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="teamName">Team Name (if applicable)</Label>
-                      <Input
-                        id="teamName"
-                        placeholder="My Squad"
-                        value={registrationData.teamName}
-                        onChange={(e) => setRegistrationData({ ...registrationData, teamName: e.target.value })}
-                      />
-                      <p className="text-xs text-muted-foreground">Leave blank if playing solo</p>
-                    </div>
-                  </div>
-
-                  <div className="border-t pt-4 space-y-4">
-                    <div className="bg-muted/50 rounded-lg p-4 space-y-2">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">Entry Fee</span>
-                        <span className="font-bold">{selectedTournament.entryFee} SOL</span>
-                      </div>
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">Current Prize Pool</span>
-                        <span className="font-bold text-primary">~{selectedTournament.prizePool.toFixed(2)} SOL</span>
-                      </div>
-                      <div className="text-xs text-muted-foreground pt-2 border-t border-border">
-                        Prize Distribution: 1st (60%) • 2nd (30%) • 3rd (10%)
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-4">
-                    <Button type="submit" disabled={registering !== null} className="flex-1">
-                      {registering ? (
-                        <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Processing Payment...
-                        </>
-                      ) : (
-                        <>
-                          <Wallet className="w-4 h-4 mr-2" />
-                          Pay & Register
-                        </>
-                      )}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => {
-                        setShowRegistrationForm(false)
-                        setSelectedTournament(null)
-                        setRegistrationData({ inGameUsername: "", discordHandle: "", teamName: "" })
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                </form>
-              </Card>
-            </div>
-          )}
-
-          {/* Create Tournament Form */}
-          {showJoinModal && (
-            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-              <Card className="w-full max-w-2xl p-6 border-2 border-primary/20 relative">
-                <button
-                  onClick={() => setShowJoinModal(false)}
-                  className="absolute top-4 right-4 p-2 hover:bg-muted rounded-lg transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-
-                <form onSubmit={createTournament} className="space-y-6">
-                  <div className="space-y-2">
-                    <h3 className="text-2xl font-bold">Create New Tournament</h3>
-                    <p className="text-muted-foreground">Set up a new competition for players to join</p>
-                  </div>
-
-                  <div className="grid md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <Label htmlFor="name">Tournament Name</Label>
-                      <Input
-                        id="name"
-                        placeholder="Battle Royale #1"
-                        value={tournamentName}
-                        onChange={(e) => setTournamentName(e.target.value)}
-                        required
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="game">Game</Label>
-                      <Select value={game} onValueChange={setGame} required>
-                        <SelectTrigger id="game">
-                          <SelectValue placeholder="Select a game" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Fortnite">Fortnite</SelectItem>
-                          <SelectItem value="The Finals">The Finals</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="entry">Entry Fee (SOL)</Label>
-                      <Input
-                        id="entry"
-                        type="number"
-                        step="0.01"
-                        min="0.01"
-                        placeholder="0.1"
-                        value={entryFee}
-                        onChange={(e) => setEntryFee(e.target.value)}
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex gap-4">
-                    <Button type="submit" disabled={isCreating}>
-                      {isCreating ? (
-                        <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Creating on blockchain...
-                        </>
-                      ) : (
-                        "Create Tournament"
-                      )}
-                    </Button>
-                    <Button type="button" variant="outline" onClick={() => setShowJoinModal(false)}>
-                      Cancel
-                    </Button>
-                  </div>
-                </form>
-              </Card>
-            </div>
-          )}
-
-          {/* Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12">
-            <Card className="p-4 sm:p-6 space-y-2 bg-card border-2 border-border">
-              <div className="text-xs sm:text-sm text-muted-foreground">Total Tournaments</div>
-              <div className="text-2xl sm:text-3xl font-bold text-primary">{tournaments.length}</div>
-            </Card>
-            <Card className="p-4 sm:p-6 space-y-2 bg-card border-2 border-border">
-              <div className="text-xs sm:text-sm text-muted-foreground">Active Now</div>
-              <div className="text-2xl sm:text-3xl font-bold text-primary">
-                {tournaments.filter((t) => t.challonge.state === "underway").length}
-              </div>
-            </Card>
-            <Card className="p-4 sm:p-6 space-y-2 bg-card border-2 border-border">
-              <div className="text-xs sm:text-sm text-muted-foreground">Total Players</div>
-              <div className="text-2xl sm:text-3xl font-bold">{tournamentStats.totalPlayers.toLocaleString()}</div>
-            </Card>
-            <Card className="p-4 sm:p-6 space-y-2 bg-card border-2 border-border">
-              <div className="text-xs sm:text-sm text-muted-foreground">Total Prize Pool</div>
-              <div className="text-2xl sm:text-3xl font-bold text-primary">
-                {tournamentStats.totalPrizePool.toFixed(1)} SOL
-              </div>
-            </Card>
-          </div>
-
-          {/* Tournaments List */}
-          <div className="space-y-4">
-            <h2 className="text-2xl font-bold">Active Tournaments</h2>
-
-            {!connected && (
-              <Card className="p-8 text-center space-y-4 border-2 border-border">
-                <div className="w-16 h-16 mx-auto bg-primary/10 rounded-2xl flex items-center justify-center">
-                  <Wallet className="w-8 h-8 text-primary" />
-                </div>
-                <div className="space-y-2">
-                  <h3 className="text-xl font-bold">Connect your wallet</h3>
-                  <p className="text-muted-foreground">Connect your Solana wallet to view and join tournaments</p>
-                </div>
-                <Button size="lg" onClick={connect} disabled={connecting}>
-                  <Wallet className="w-5 h-5 mr-2" />
-                  {connecting ? "Connecting..." : "Connect Wallet"}
+                  Cancel
                 </Button>
-              </Card>
-            )}
-
-            {connected && tournaments.length === 0 && (
-              <Card className="p-8 text-center space-y-4 border-2 border-border">
-                <div className="w-16 h-16 mx-auto bg-primary/10 rounded-2xl flex items-center justify-center">
-                  <Trophy className="w-8 h-8 text-primary" />
-                </div>
-                <div className="space-y-2">
-                  <h3 className="text-xl font-bold">No tournaments yet</h3>
-                  <p className="text-muted-foreground">Be the first to create a tournament</p>
-                </div>
-                <Button size="lg" onClick={() => setShowJoinModal(true)}>
-                  <Plus className="w-5 h-5 mr-2" />
-                  Create Tournament
-                </Button>
-              </Card>
-            )}
-
-            {connected && (
-              <div className="grid gap-4">
-                {tournaments.map((tournament) => {
-                  const isRegistering = registering === tournament.id
-
-                  return (
-                    <Card
-                      key={tournament.id}
-                      className="p-6 border-2 border-border hover:border-primary/50 transition-colors"
-                    >
-                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-2">
-                            <h3 className="text-xl font-bold">{tournament.name}</h3>
-                            <span
-                              className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                tournament.challonge.state === "underway"
-                                  ? "bg-primary/20 text-primary"
-                                  : tournament.challonge.state === "pending"
-                                    ? "bg-blue-500/20 text-blue-500"
-                                    : "bg-gray-500/20 text-gray-500"
-                              }`}
-                            >
-                              {tournament.challonge.state}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                            <div className="flex items-center gap-1">
-                              <Users className="w-4 h-4" />
-                              <span>{tournament.currentParticipants} players</span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <Calendar className="w-4 h-4" />
-                              <span>{new Date(tournament.created_at).toLocaleDateString()}</span>
-                            </div>
-                          </div>
-                          {tournament.game && (
-                            <div className="text-sm text-muted-foreground">Game: {tournament.game}</div>
-                          )}
-                        </div>
-                        <div className="flex flex-col items-start md:items-end gap-2">
-                          <div className="space-y-1 text-right">
-                            <div className="text-sm text-muted-foreground">Entry Fee</div>
-                            <div className="text-2xl font-bold text-primary">{tournament.entryFee} SOL</div>
-                            <div className="text-xs text-muted-foreground">
-                              Prize Pool: ~{(tournament.entryFee * tournament.currentParticipants).toFixed(2)} SOL
-                            </div>
-                          </div>
-                          <Button
-                            onClick={() => openRegistrationForm(tournament)}
-                            disabled={isRegistering || tournament.challonge.state !== "pending"}
-                          >
-                            {isRegistering ? (
-                              <>
-                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                Registering...
-                              </>
-                            ) : tournament.challonge.state !== "pending" ? (
-                              "Tournament Started"
-                            ) : (
-                              "Join Tournament"
-                            )}
-                          </Button>
-                        </div>
-                      </div>
-                    </Card>
-                  )
-                })}
               </div>
-            )}
-          </div>
+            </form>
+          </Card>
         </div>
-      </section>
+      )}
     </div>
   )
 }
