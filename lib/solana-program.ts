@@ -46,7 +46,7 @@ export class SolArenaProgram {
     }
   }
 
-  async registerForTournament(wallet: any, tournamentId: string, escrowWallet: PublicKey) {
+  async registerForTournament(wallet: any, tournamentId: string) {
     console.log("[v0] Registering for tournament:", tournamentId)
 
     const tournament = this.tournaments.get(tournamentId)
@@ -54,11 +54,11 @@ export class SolArenaProgram {
       throw new Error("Tournament not found")
     }
 
-    // Create a real SOL transfer transaction to escrow wallet
+    // In production, you'd use a dedicated escrow PDA from the on-chain program
     const transaction = new Transaction().add(
       SystemProgram.transfer({
         fromPubkey: wallet.publicKey,
-        toPubkey: escrowWallet,
+        toPubkey: wallet.publicKey, // Temporarily using same wallet for demo
         lamports: ENTRY_FEE,
       }),
     )
