@@ -133,6 +133,14 @@ export default function Home() {
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/20 via-background to-background pointer-events-none" />
 
         <div className="container mx-auto max-w-6xl relative">
+          <div className="flex justify-center mb-12">
+            <img
+              src="/sol-arena-logo.png"
+              alt="Sol Arena"
+              className="w-[32rem] h-[32rem] object-contain animate-in fade-in zoom-in duration-700"
+            />
+          </div>
+
           <div className="flex flex-col lg:flex-row items-center gap-12">
             <div className="flex-1 space-y-8">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-sm">

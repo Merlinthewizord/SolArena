@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { Trophy, Wallet } from "lucide-react"
+import { Wallet } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ProfileDropdown } from "@/components/profile-dropdown"
 import { useWallet } from "@/components/wallet-provider"
@@ -21,11 +21,8 @@ export function Navigation() {
     <nav className="fixed top-0 w-full z-50 border-b border-border/40 bg-background/80 backdrop-blur-lg">
       <div className="container mx-auto px-4 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-              <Trophy className="w-5 h-5 text-primary-foreground" />
-            </div>
-            <span className="text-xl font-bold">Sol Arena</span>
+          <Link href="/" className="flex items-center">
+            <img src="/sol-arena-text-logo.png" alt="Sol Arena" className="h-8 w-auto object-contain" />
           </Link>
 
           <div className="hidden md:flex items-center gap-8">
