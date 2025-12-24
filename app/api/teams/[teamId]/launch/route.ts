@@ -17,10 +17,25 @@ export async function POST(request: NextRequest, { params }: { params: { teamId:
     const body = await request.json()
     const validatedBody = LaunchRequestSchema.parse(body)
 
-    const { data: team, error: fetchError } = await supabaseAdmin.from("teams").select("*").eq("id", teamId).single()
+    const { data: team, error: fetchError } = await supabaseAdmin
+      .from("teams")
+      .select("*")
+      .eq("id", teamId)
+      .maybeSingle()
 
-    if (fetchError || !team) {
-      console.error("[Team Launch API] Team not found:", fetchError)
+    if (fetchError) {
+      console.error("[Team Launch API] Error fetching team:", fetchError)
+      return NextResponse.json(
+        {
+          error: "Failed to fetch team data",
+          details: fetchError.message,
+        },
+        { status: 500 },
+      )
+    }
+
+    if (!team) {
+      console.error("[Team Launch API] Team not found with id:", teamId)
       return NextResponse.json({ error: "Team not found" }, { status: 404 })
     }
 
