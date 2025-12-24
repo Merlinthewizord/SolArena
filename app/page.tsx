@@ -129,35 +129,35 @@ export default function Home() {
       <Navigation />
 
       {/* Hero Section */}
-      <section className="relative pt-32 pb-20 px-4 overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/20 via-background to-background pointer-events-none" />
+      <section className="relative min-h-screen flex items-center justify-center px-4 py-20">
+        <div className="absolute inset-0 bg-gradient-to-b from-primary/5 via-background to-background" />
 
-        <div className="container mx-auto max-w-6xl relative">
-          <div className="flex justify-center mb-12">
-            <img
-              src="/sol-arena-logo.png"
-              alt="Sol Arena"
-              className="w-[32rem] h-[32rem] object-contain animate-in fade-in zoom-in duration-700"
-            />
-          </div>
+        <div className="container relative z-10">
+          <div className="flex flex-col lg:flex-row items-center gap-8 lg:gap-12">
+            <div className="flex-1 flex justify-center lg:justify-start">
+              <img
+                src="/sol-arena-logo.png"
+                alt="Sol Arena Logo"
+                className="w-64 h-64 sm:w-80 sm:h-80 lg:w-[32rem] lg:h-[32rem] object-contain animate-in fade-in zoom-in duration-700"
+              />
+            </div>
 
-          <div className="flex flex-col lg:flex-row items-center gap-12">
-            <div className="flex-1 space-y-8">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-sm">
+            <div className="flex-1 space-y-6 lg:space-y-8 text-center lg:text-left">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-sm mx-auto lg:mx-0">
                 <Zap className="w-4 h-4 text-primary" />
                 <span className="text-primary">Live on Solana</span>
               </div>
 
-              <h1 className="text-5xl lg:text-7xl font-bold leading-tight text-balance">
+              <h1 className="text-4xl sm:text-5xl lg:text-7xl font-bold leading-tight text-balance">
                 Compete. Win. <span className="text-primary">Earn SOL.</span>
               </h1>
 
-              <p className="text-xl text-muted-foreground leading-relaxed max-w-xl">
+              <p className="text-lg sm:text-xl text-muted-foreground leading-relaxed max-w-xl mx-auto lg:mx-0">
                 Enter winner-takes-all tournaments with your Solana wallet. Create your profile, join competitions, and
                 claim the entire prize pool.
               </p>
 
-              <div className="flex flex-col sm:flex-row gap-4">
+              <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
                 {connected ? (
                   <Button size="lg" className="text-base" asChild>
                     <Link href="/dashboard">
@@ -201,72 +201,6 @@ export default function Home() {
                   <div className="text-sm text-muted-foreground">Win Rate</div>
                 </div>
               </div>
-            </div>
-
-            <div className="flex-1 relative">
-              {liveTournament ? (
-                <div className="relative w-full max-w-md mx-auto">
-                  <div className="absolute inset-0 bg-primary/20 rounded-3xl blur-3xl" />
-                  <Card className="relative p-6 border-2 border-primary/20 bg-card/50 backdrop-blur">
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">Live Tournament</span>
-                        <span className="px-2 py-1 rounded-full bg-primary/20 text-primary text-xs font-medium">
-                          {liveTournament.state === "pending" ? "Open" : "Active"}
-                        </span>
-                      </div>
-                      <div className="space-y-2">
-                        <h3 className="text-2xl font-bold">{liveTournament.name}</h3>
-                        <p className="text-sm text-muted-foreground">Entry: {liveTournament.entry_fee || "0.1"} SOL</p>
-                      </div>
-                      <div className="pt-4 border-t border-border">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm text-muted-foreground">Prize Pool</span>
-                          <span className="text-2xl font-bold text-primary">
-                            {(
-                              (liveTournament.participants_count || 0) *
-                              Number.parseFloat(liveTournament.entry_fee || "0.1")
-                            ).toFixed(1)}{" "}
-                            SOL
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Users className="w-4 h-4" />
-                          <span>{liveTournament.participants_count || 0} players entered</span>
-                        </div>
-                      </div>
-                      <Link href="/tournaments">
-                        <Button className="w-full" size="lg">
-                          Join Tournament
-                        </Button>
-                      </Link>
-                    </div>
-                  </Card>
-                </div>
-              ) : (
-                <div className="relative w-full max-w-md mx-auto">
-                  <div className="absolute inset-0 bg-primary/20 rounded-3xl blur-3xl" />
-                  <Card className="relative p-6 border-2 border-primary/20 bg-card/50 backdrop-blur">
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">Live Tournament</span>
-                        <span className="px-2 py-1 rounded-full bg-muted text-muted-foreground text-xs font-medium">
-                          No Active
-                        </span>
-                      </div>
-                      <div className="space-y-2">
-                        <h3 className="text-2xl font-bold">No tournaments running</h3>
-                        <p className="text-sm text-muted-foreground">Check back soon for new tournaments</p>
-                      </div>
-                      <Link href="/tournaments">
-                        <Button className="w-full bg-transparent" size="lg" variant="outline">
-                          View All Tournaments
-                        </Button>
-                      </Link>
-                    </div>
-                  </Card>
-                </div>
-              )}
             </div>
           </div>
         </div>

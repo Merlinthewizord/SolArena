@@ -584,24 +584,26 @@ export default function TournamentsPage() {
           )}
 
           {/* Stats */}
-          <div className="grid md:grid-cols-4 gap-4 mb-12">
-            <Card className="p-6 space-y-2 bg-card border-2 border-border">
-              <div className="text-sm text-muted-foreground">Total Tournaments</div>
-              <div className="text-3xl font-bold text-primary">{tournaments.length}</div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12">
+            <Card className="p-4 sm:p-6 space-y-2 bg-card border-2 border-border">
+              <div className="text-xs sm:text-sm text-muted-foreground">Total Tournaments</div>
+              <div className="text-2xl sm:text-3xl font-bold text-primary">{tournaments.length}</div>
             </Card>
-            <Card className="p-6 space-y-2 bg-card border-2 border-border">
-              <div className="text-sm text-muted-foreground">Active Now</div>
-              <div className="text-3xl font-bold text-primary">
+            <Card className="p-4 sm:p-6 space-y-2 bg-card border-2 border-border">
+              <div className="text-xs sm:text-sm text-muted-foreground">Active Now</div>
+              <div className="text-2xl sm:text-3xl font-bold text-primary">
                 {tournaments.filter((t) => t.challonge.state === "underway").length}
               </div>
             </Card>
-            <Card className="p-6 space-y-2 bg-card border-2 border-border">
-              <div className="text-sm text-muted-foreground">Total Players</div>
-              <div className="text-3xl font-bold">{tournamentStats.totalPlayers.toLocaleString()}</div>
+            <Card className="p-4 sm:p-6 space-y-2 bg-card border-2 border-border">
+              <div className="text-xs sm:text-sm text-muted-foreground">Total Players</div>
+              <div className="text-2xl sm:text-3xl font-bold">{tournamentStats.totalPlayers.toLocaleString()}</div>
             </Card>
-            <Card className="p-6 space-y-2 bg-card border-2 border-border">
-              <div className="text-sm text-muted-foreground">Total Prize Pool</div>
-              <div className="text-3xl font-bold text-primary">{tournamentStats.totalPrizePool.toFixed(1)} SOL</div>
+            <Card className="p-4 sm:p-6 space-y-2 bg-card border-2 border-border">
+              <div className="text-xs sm:text-sm text-muted-foreground">Total Prize Pool</div>
+              <div className="text-2xl sm:text-3xl font-bold text-primary">
+                {tournamentStats.totalPrizePool.toFixed(1)} SOL
+              </div>
             </Card>
           </div>
 
