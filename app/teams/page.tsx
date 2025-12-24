@@ -16,6 +16,8 @@ import Link from "next/link"
 import { createBrowserClient } from "@/lib/supabase/client"
 import { VideoBackground } from "@/components/video-background"
 import { useToast } from "@/hooks/use-toast"
+import { getSolanaConnection, createTeamToken } from "@/lib/meteora-dbc"
+import { PublicKey } from "@solana/web3.js"
 
 interface Team {
   id: string
@@ -33,6 +35,7 @@ interface Team {
   region: string
   is_verified: boolean
   created_at: string
+  bonding_curve_address: string
 }
 
 export default function TeamsPage() {
@@ -102,9 +105,40 @@ export default function TeamsPage() {
     setCreating(true)
 
     try {
-      const teamMint = `${formData.symbol}_${Date.now()}_MINT`
+      console.log("[v0] Starting real team token creation...")
+
+      const provider = (window as any).phantom?.solana
+      if (!provider) {
+        throw new Error("Phantom wallet not found")
+      }
 
       const logoToSave = logoPreview || formData.logo_url || "/abstract-team-logo.png"
+
+      const connection = getSolanaConnection()
+      const creatorPublicKey = new PublicKey(profile.wallet_address)
+
+      toast({
+        title: "Creating team token...",
+        description: "Please approve the transaction in your wallet",
+      })
+
+      const tokenResult = await createTeamToken(
+        connection,
+        {
+          teamName: formData.name,
+          symbol: formData.symbol,
+          description: formData.description,
+          imageUri: logoToSave,
+          creatorWallet: creatorPublicKey,
+          payerWallet: creatorPublicKey,
+        },
+        async (tx) => {
+          const signed = await provider.signTransaction(tx)
+          return signed
+        },
+      )
+
+      console.log("[v0] Token created:", tokenResult)
 
       const { data, error } = await supabase
         .from("teams")
@@ -113,7 +147,8 @@ export default function TeamsPage() {
           symbol: formData.symbol,
           description: formData.description,
           logo_url: logoToSave,
-          team_mint: teamMint,
+          team_mint: tokenResult.teamMint,
+          bonding_curve_address: tokenResult.bondingCurveAddress,
           creator_wallet: profile.wallet_address,
           game: formData.game,
           region: formData.region,
@@ -125,8 +160,16 @@ export default function TeamsPage() {
       }
 
       toast({
-        title: "Team created!",
-        description: `${formData.name} has been successfully created.`,
+        title: "Team token deployed!",
+        description: `${formData.name} ($${formData.symbol}) has been created on Solana. View on Solscan`,
+        action: {
+          label: "View Transaction",
+          onClick: () => {
+            const network = process.env.NEXT_PUBLIC_SOLANA_NETWORK || "devnet"
+            const cluster = network === "mainnet-beta" ? "" : "?cluster=devnet"
+            window.open(`https://solscan.io/tx/${tokenResult.transactionSignature}${cluster}`, "_blank")
+          },
+        },
       })
 
       setShowCreateForm(false)
@@ -144,8 +187,8 @@ export default function TeamsPage() {
     } catch (error: any) {
       console.error("[v0] Error creating team:", error)
       toast({
-        title: "Error creating team",
-        description: error.message || "Failed to create team. Please try again.",
+        title: "Error creating team token",
+        description: error.message || "Failed to create team token. Please try again.",
         variant: "destructive",
       })
     } finally {

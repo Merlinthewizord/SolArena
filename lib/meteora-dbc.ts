@@ -1,76 +1,121 @@
-import type { Connection } from "@solana/web3.js"
+import { Connection, Keypair, PublicKey, type Transaction } from "@solana/web3.js"
 import { DBC_CONFIG_ADDRESS, METEORA_DBC_PROGRAM_ID } from "./dbc-config"
 
-/**
- * Initialize Meteora DBC client (placeholder for SDK integration)
- *
- * Note: Full Meteora DBC SDK integration requires:
- * 1. npm install @meteora-ag/dynamic-bonding-curve-sdk
- * 2. Import DynamicBondingCurveClient from the package
- * 3. Wire up createPool and swap methods
- */
-export function initMeteoraClient(connection: Connection) {
-  // TODO: Replace with actual Meteora SDK client initialization
-  // const client = new DynamicBondingCurveClient(connection, METEORA_DBC_PROGRAM_ID)
-  // return client
-
-  return {
-    programId: METEORA_DBC_PROGRAM_ID,
-    config: DBC_CONFIG_ADDRESS,
-    connection,
-  }
-}
-
-/**
- * Create a team token pool on Meteora DBC
- * This is a placeholder that should be replaced with actual Meteora SDK calls
- */
-export async function createTeamTokenPool(params: {
-  connection: Connection
+// Types for team token creation
+export interface CreateTeamTokenParams {
   teamName: string
   symbol: string
-  decimals: number
-  metadataUri: string
-}) {
-  // TODO: Implement actual Meteora DBC pool creation
-  // const client = initMeteoraClient(params.connection)
-  // const poolAddress = await client.createPool({
-  //   config: DBC_CONFIG_ADDRESS,
-  //   baseMint: teamMint,
-  //   quoteMint: DEFAULT_QUOTE_MINT,
-  //   ...
-  // })
+  description: string
+  imageUri: string
+  creatorWallet: PublicKey
+  payerWallet: PublicKey
+}
 
-  console.log("[v0] Creating team token pool with Meteora DBC:", {
-    programId: METEORA_DBC_PROGRAM_ID.toString(),
-    config: DBC_CONFIG_ADDRESS.toString(),
-    ...params,
-  })
+export interface TeamTokenResult {
+  teamMint: string
+  poolAddress: string
+  bondingCurveAddress: string
+  transactionSignature: string
+}
 
-  // Return placeholder values
-  return {
-    poolAddress: "placeholder_pool_address",
-    teamMint: "placeholder_team_mint",
-    bondingCurveAddress: "placeholder_bonding_curve",
+/**
+ * Create a team token using Meteora DBC
+ * This will deploy a real SPL token with a bonding curve
+ */
+export async function createTeamToken(
+  connection: Connection,
+  params: CreateTeamTokenParams,
+  signTransaction: (tx: Transaction) => Promise<Transaction>,
+): Promise<TeamTokenResult> {
+  try {
+    console.log("[v0] Creating team token with Meteora DBC:", params)
+
+    // Dynamically import the SDK (only loads when needed)
+    const { DynamicBondingCurveClient } = await import("@meteora-ag/dynamic-bonding-curve-sdk")
+
+    // Initialize DBC client
+    const client = new DynamicBondingCurveClient(connection, "confirmed")
+
+    // Generate new mint keypair for the team token
+    const baseMint = Keypair.generate()
+    console.log(`[v0] Generated team token mint: ${baseMint.publicKey.toString()}`)
+
+    // Create pool parameters
+    const createPoolParam = {
+      baseMint: baseMint.publicKey,
+      config: DBC_CONFIG_ADDRESS,
+      name: params.teamName,
+      symbol: params.symbol,
+      uri: params.imageUri,
+      payer: params.payerWallet,
+      poolCreator: params.creatorWallet,
+    }
+
+    // Create the pool transaction
+    console.log("[v0] Building create pool transaction...")
+    const poolTransaction = await client.pool.createPool(createPoolParam)
+
+    // Get latest blockhash
+    const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("finalized")
+    poolTransaction.recentBlockhash = blockhash
+    poolTransaction.feePayer = params.payerWallet
+
+    // Sign with base mint keypair
+    poolTransaction.partialSign(baseMint)
+
+    // Sign with user wallet via Phantom
+    console.log("[v0] Requesting wallet signature...")
+    const signedTransaction = await signTransaction(poolTransaction)
+
+    // Send and confirm transaction
+    console.log("[v0] Sending transaction to Solana...")
+    const signature = await connection.sendRawTransaction(signedTransaction.serialize(), {
+      skipPreflight: false,
+      maxRetries: 3,
+    })
+
+    console.log("[v0] Confirming transaction...")
+    await connection.confirmTransaction(
+      {
+        signature,
+        blockhash,
+        lastValidBlockHeight,
+      },
+      "confirmed",
+    )
+
+    console.log(`[v0] Team token created successfully! Signature: ${signature}`)
+
+    // Derive the pool address (PDA from config and base mint)
+    const [poolAddress] = PublicKey.findProgramAddressSync(
+      [Buffer.from("virtual_pool"), DBC_CONFIG_ADDRESS.toBuffer(), baseMint.publicKey.toBuffer()],
+      METEORA_DBC_PROGRAM_ID,
+    )
+
+    // Derive bonding curve address (PDA from pool)
+    const [bondingCurveAddress] = PublicKey.findProgramAddressSync(
+      [Buffer.from("bonding_curve"), poolAddress.toBuffer()],
+      METEORA_DBC_PROGRAM_ID,
+    )
+
+    return {
+      teamMint: baseMint.publicKey.toString(),
+      poolAddress: poolAddress.toString(),
+      bondingCurveAddress: bondingCurveAddress.toString(),
+      transactionSignature: signature,
+    }
+  } catch (error) {
+    console.error("[v0] Error creating team token:", error)
+    throw error
   }
 }
 
 /**
- * Get quote for buying/selling team tokens
- * This is a placeholder that should be replaced with actual Meteora SDK calls
+ * Get the Solana connection for the configured network
  */
-export async function getTokenQuote(params: {
-  connection: Connection
-  poolAddress: string
-  amount: number
-  isBuy: boolean
-}) {
-  // TODO: Implement actual Meteora DBC quote fetching
-  console.log("[v0] Getting token quote from Meteora DBC:", params)
+export function getSolanaConnection(): Connection {
+  const network = process.env.NEXT_PUBLIC_SOLANA_NETWORK || "devnet"
+  const rpcUrl = network === "mainnet-beta" ? "https://api.mainnet-beta.solana.com" : "https://api.devnet.solana.com"
 
-  return {
-    inputAmount: params.amount,
-    outputAmount: params.amount * (params.isBuy ? 0.95 : 1.05), // Placeholder with 5% slippage
-    priceImpact: 0.05,
-  }
+  return new Connection(rpcUrl, "confirmed")
 }
