@@ -1,0 +1,19 @@
+[package]
+name = "sol-arena"
+version = "0.1.0"
+description = "Sol Arena Tournament Escrow Program"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "sol_arena"
+
+[features]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+cpi = ["no-entrypoint"]
+default = []
+
+[dependencies]
+anchor-lang = "0.29.0"

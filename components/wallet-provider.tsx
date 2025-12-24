@@ -17,6 +17,7 @@ interface WalletContextType {
   connecting: boolean
   connect: () => Promise<void>
   disconnect: () => Promise<void>
+  getProvider: () => PhantomProvider | null
 }
 
 const WalletContext = createContext<WalletContextType>({
@@ -25,6 +26,7 @@ const WalletContext = createContext<WalletContextType>({
   connecting: false,
   connect: async () => {},
   disconnect: async () => {},
+  getProvider: () => null,
 })
 
 export function WalletProvider({ children }: { children: ReactNode }) {
@@ -151,7 +153,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <WalletContext.Provider value={{ publicKey, connected, connecting, connect, disconnect }}>
+    <WalletContext.Provider
+      value={{ publicKey, connected, connecting, connect, disconnect, getProvider: getPhantomProvider }}
+    >
       {children}
     </WalletContext.Provider>
   )

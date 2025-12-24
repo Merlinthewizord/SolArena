@@ -2,30 +2,65 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Trophy, Wallet, Users, Calendar, Plus } from "lucide-react"
+import { Trophy, Wallet, Users, Calendar, Plus, Loader2 } from "lucide-react"
 import { useWallet } from "@/components/wallet-provider"
 import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
+import { SolArenaProgram } from "@/lib/solana-program"
+import { LAMPORTS_PER_SOL } from "@solana/web3.js"
 
 const CHALLONGE_API_KEY = "4f3911421ecd87e06a5395d8c77c75e95526b36f9b8f256b"
 
+interface TournamentData {
+  challonge: any
+  blockchain?: {
+    escrowPDA: string
+    totalPool: number
+    participants: number
+  }
+}
+
 export default function TournamentsPage() {
-  const { publicKey, connected, connecting, connect } = useWallet()
+  const { publicKey, connected, connecting, connect, getProvider } = useWallet()
   const { toast } = useToast()
-  const [tournaments, setTournaments] = useState<any[]>([])
+  const [tournaments, setTournaments] = useState<TournamentData[]>([])
   const [creating, setCreating] = useState(false)
   const [showCreateForm, setShowCreateForm] = useState(false)
+  const [solanaProgram, setSolanaProgram] = useState<SolArenaProgram | null>(null)
+  const [registering, setRegistering] = useState<string | null>(null)
 
   // Form state
   const [tournamentName, setTournamentName] = useState("")
   const [game, setGame] = useState("")
   const [entryFee, setEntryFee] = useState("0.1")
+
+  useEffect(() => {
+    if (connected && getProvider()) {
+      const provider = getProvider()
+      if (provider && provider.publicKey) {
+        const program = new SolArenaProgram()
+        program
+          .initialize(provider)
+          .then(() => {
+            setSolanaProgram(program)
+            console.log("[v0] Solana program initialized")
+          })
+          .catch((error) => {
+            console.error("[v0] Error initializing Solana program:", error)
+          })
+      }
+    }
+  }, [connected, getProvider])
+
+  useEffect(() => {
+    fetchTournaments()
+  }, [])
 
   const createTournament = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -39,37 +74,54 @@ export default function TournamentsPage() {
       return
     }
 
+    if (!solanaProgram) {
+      toast({
+        title: "Solana program not ready",
+        description: "Please wait for the blockchain connection to initialize",
+        variant: "destructive",
+      })
+      return
+    }
+
     setCreating(true)
 
     try {
-      // Create tournament on Challonge
-      const response = await fetch("https://api.challonge.com/v1/tournaments.json", {
+      console.log("[v0] Creating tournament:", { tournamentName, game, entryFee })
+
+      // Step 1: Create tournament on Challonge
+      const challongeResponse = await fetch("/api/tournaments", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          api_key: CHALLONGE_API_KEY,
-          tournament: {
-            name: tournamentName,
-            game_name: game,
-            tournament_type: "single elimination",
-            description: `Entry Fee: ${entryFee} SOL`,
-            open_signup: true,
-            hold_third_place_match: false,
-          },
+          name: tournamentName,
+          game: game,
+          entryFee: entryFee,
         }),
       })
 
-      if (!response.ok) {
-        throw new Error("Failed to create tournament")
+      if (!challongeResponse.ok) {
+        const errorData = await challongeResponse.json()
+        throw new Error(errorData.error || "Failed to create tournament on Challonge")
       }
 
-      const data = await response.json()
+      const challongeData = await challongeResponse.json()
+      const tournamentId = challongeData.tournament.id.toString()
+      console.log("[v0] Challonge tournament created:", tournamentId)
+
+      // Step 2: Create on-chain escrow contract
+      const provider = getProvider()
+      if (!provider) throw new Error("Wallet provider not found")
+
+      const entryFeeInLamports = Number.parseFloat(entryFee) * LAMPORTS_PER_SOL
+      const result = await solanaProgram.createTournament(provider, tournamentId, entryFeeInLamports)
+
+      console.log("[v0] On-chain tournament created:", result)
 
       toast({
         title: "Tournament created!",
-        description: `${tournamentName} has been created successfully`,
+        description: `${tournamentName} is ready for players to join`,
       })
 
       // Reset form
@@ -84,7 +136,7 @@ export default function TournamentsPage() {
       console.error("[v0] Error creating tournament:", error)
       toast({
         title: "Error",
-        description: "Failed to create tournament. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to create tournament",
         variant: "destructive",
       })
     } finally {
@@ -92,16 +144,64 @@ export default function TournamentsPage() {
     }
   }
 
+  const registerForTournament = async (tournamentId: string, entryFeeSol: number) => {
+    if (!connected || !solanaProgram) {
+      toast({
+        title: "Not ready",
+        description: "Please ensure your wallet is connected",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setRegistering(tournamentId)
+
+    try {
+      const provider = getProvider()
+      if (!provider) throw new Error("Wallet provider not found")
+
+      console.log("[v0] Registering for tournament:", tournamentId)
+
+      const result = await solanaProgram.registerForTournament(provider, tournamentId)
+
+      console.log("[v0] Registration successful:", result)
+
+      toast({
+        title: "Registration successful!",
+        description: `You've joined the tournament. ${entryFeeSol} SOL has been deposited to the prize pool.`,
+      })
+
+      // Refresh tournaments to update participant count
+      fetchTournaments()
+    } catch (error) {
+      console.error("[v0] Error registering:", error)
+      toast({
+        title: "Registration failed",
+        description: error instanceof Error ? error.message : "Failed to register for tournament",
+        variant: "destructive",
+      })
+    } finally {
+      setRegistering(null)
+    }
+  }
+
   const fetchTournaments = async () => {
     try {
-      const response = await fetch(`https://api.challonge.com/v1/tournaments.json?api_key=${CHALLONGE_API_KEY}`)
+      const response = await fetch("/api/tournaments")
 
       if (!response.ok) {
         throw new Error("Failed to fetch tournaments")
       }
 
       const data = await response.json()
-      setTournaments(data)
+      console.log("[v0] Tournaments fetched:", data)
+
+      const transformedData = data.map((item: any) => ({
+        challonge: item.tournament,
+        blockchain: undefined, // Will be populated when we fetch on-chain data
+      }))
+
+      setTournaments(transformedData)
     } catch (error) {
       console.error("[v0] Error fetching tournaments:", error)
     }
@@ -212,7 +312,14 @@ export default function TournamentsPage() {
 
                 <div className="flex gap-4">
                   <Button type="submit" disabled={creating}>
-                    {creating ? "Creating..." : "Create Tournament"}
+                    {creating ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Creating on blockchain...
+                      </>
+                    ) : (
+                      "Create Tournament"
+                    )}
                   </Button>
                   <Button type="button" variant="outline" onClick={() => setShowCreateForm(false)}>
                     Cancel
@@ -231,7 +338,7 @@ export default function TournamentsPage() {
             <Card className="p-6 space-y-2 bg-card border-2 border-border">
               <div className="text-sm text-muted-foreground">Active Now</div>
               <div className="text-3xl font-bold text-primary">
-                {tournaments.filter((t) => t.tournament?.state === "underway").length}
+                {tournaments.filter((t) => t.challonge?.state === "underway").length}
               </div>
             </Card>
             <Card className="p-6 space-y-2 bg-card border-2 border-border">
@@ -283,7 +390,10 @@ export default function TournamentsPage() {
             {connected && (
               <div className="grid gap-4">
                 {tournaments.map((item) => {
-                  const tournament = item.tournament
+                  const tournament = item.challonge
+                  const entryFeeSol = Number.parseFloat(tournament.description?.match(/[\d.]+/)?.[0] || "0.1")
+                  const isRegistering = registering === tournament.id.toString()
+
                   return (
                     <Card
                       key={tournament.id}
@@ -320,10 +430,28 @@ export default function TournamentsPage() {
                           )}
                         </div>
                         <div className="flex flex-col items-start md:items-end gap-2">
-                          <div className="text-2xl font-bold text-primary">
-                            {tournament.description?.match(/[\d.]+/)?.[0] || "0.1"} SOL
+                          <div className="space-y-1 text-right">
+                            <div className="text-sm text-muted-foreground">Entry Fee</div>
+                            <div className="text-2xl font-bold text-primary">{entryFeeSol} SOL</div>
+                            <div className="text-xs text-muted-foreground">
+                              Prize Pool: ~{(entryFeeSol * tournament.participants_count).toFixed(2)} SOL
+                            </div>
                           </div>
-                          <Button>Join Tournament</Button>
+                          <Button
+                            onClick={() => registerForTournament(tournament.id.toString(), entryFeeSol)}
+                            disabled={isRegistering || tournament.state !== "pending"}
+                          >
+                            {isRegistering ? (
+                              <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                Registering...
+                              </>
+                            ) : tournament.state !== "pending" ? (
+                              "Tournament Started"
+                            ) : (
+                              "Join Tournament"
+                            )}
+                          </Button>
                         </div>
                       </div>
                     </Card>
