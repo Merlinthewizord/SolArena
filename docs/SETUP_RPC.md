@@ -15,7 +15,7 @@ The public Solana RPC endpoints (`api.mainnet-beta.solana.com`) have strict rate
   3. Copy your API key
   4. Set environment variable:
      ```bash
-     NEXT_PUBLIC_SOLANA_RPC_URL=https://mainnet.helius-rpc.com/?api-key=YOUR_API_KEY
+     NEXT_PUBLIC_SOLANA_RPC_URL=https://mainnet.helius-rpc.com/?api-key=<YOUR_HELIUS_API_KEY>
      ```
 
 ### 2. QuickNode
@@ -27,7 +27,7 @@ The public Solana RPC endpoints (`api.mainnet-beta.solana.com`) have strict rate
   3. Copy your HTTP endpoint URL
   4. Set environment variable:
      ```bash
-     NEXT_PUBLIC_SOLANA_RPC_URL=https://YOUR-ENDPOINT.solana-mainnet.quiknode.pro/YOUR_TOKEN/
+     NEXT_PUBLIC_SOLANA_RPC_URL=https://<YOUR_ENDPOINT>.solana-mainnet.quiknode.pro/<YOUR_TOKEN>/
      ```
 
 ### 3. Alchemy
@@ -39,7 +39,7 @@ The public Solana RPC endpoints (`api.mainnet-beta.solana.com`) have strict rate
   3. Copy your HTTPS endpoint
   4. Set environment variable:
      ```bash
-     NEXT_PUBLIC_SOLANA_RPC_URL=https://solana-mainnet.g.alchemy.com/v2/YOUR_API_KEY
+     NEXT_PUBLIC_SOLANA_RPC_URL=https://solana-mainnet.g.alchemy.com/v2/<YOUR_ALCHEMY_API_KEY>
      ```
 
 ### 4. Triton (RPC Pool)
@@ -50,7 +50,7 @@ The public Solana RPC endpoints (`api.mainnet-beta.solana.com`) have strict rate
   2. Get your endpoint URL
   3. Set environment variable:
      ```bash
-     NEXT_PUBLIC_SOLANA_RPC_URL=https://YOUR-ENDPOINT.rpcpool.com/YOUR_TOKEN
+     NEXT_PUBLIC_SOLANA_RPC_URL=https://<YOUR_ENDPOINT>.rpcpool.com/<YOUR_TOKEN>
      ```
 
 ## Configuration
