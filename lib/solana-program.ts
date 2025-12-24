@@ -1,4 +1,11 @@
 import { Connection, type PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL } from "@solana/web3.js"
+import {
+  deriveEscrowPda,
+  getSolanaRpcUrl,
+  getTournamentProgramId,
+  checkProgramDeployment,
+  type ProgramDeploymentStatus,
+} from "./solana/config"
 
 export const ENTRY_FEE = 0.1 * LAMPORTS_PER_SOL // 0.1 SOL
 
@@ -13,17 +20,26 @@ export interface Tournament {
 export class SolArenaProgram {
   private connection: Connection
   private tournaments: Map<string, Tournament> = new Map()
+  private programId = getTournamentProgramId()
+  private programStatus: ProgramDeploymentStatus | null = null
 
-  constructor(rpcUrl = "https://api.devnet.solana.com") {
+  constructor(rpcUrl = getSolanaRpcUrl()) {
     this.connection = new Connection(rpcUrl, "confirmed")
   }
 
   async initialize(wallet: any) {
-    if (!wallet || !wallet.publicKey) {
-      console.log("[v0] SolArena program initialized without wallet")
-      return
+    if (this.programId.programId) {
+      this.programStatus = await checkProgramDeployment(this.connection, this.programId.programId)
+      console.log("[v0] Tournament program status:", this.programStatus)
+    } else {
+      console.warn("[v0] Tournament program ID missing or invalid:", this.programId.error || this.programId.raw)
     }
-    console.log("[v0] SolArena program initialized with wallet:", wallet.publicKey.toString())
+
+    if (wallet?.publicKey) {
+      console.log("[v0] SolArena program initialized with wallet:", wallet.publicKey.toString())
+    } else {
+      console.log("[v0] SolArena program initialized without wallet")
+    }
   }
 
   async createTournament(wallet: any, tournamentId: string, entryFee: number = ENTRY_FEE) {
@@ -39,10 +55,17 @@ export class SolArenaProgram {
 
     this.tournaments.set(tournamentId, tournament)
 
+    const escrowPDA =
+      this.programId.programId && this.programStatus?.deployed
+        ? deriveEscrowPda(this.programId.programId, tournamentId)
+        : null
+
     return {
       signature: `simulated-create-${tournamentId}`,
       tournamentPDA: wallet.publicKey,
-      escrowPDA: wallet.publicKey,
+      escrowPDA: escrowPDA ?? wallet.publicKey,
+      programId: this.programId.raw ?? null,
+      programReady: Boolean(this.programId.programId && this.programStatus?.deployed),
     }
   }
 
@@ -137,6 +160,18 @@ export class SolArenaProgram {
 
   async getTournamentData(tournamentId: string): Promise<Tournament | null> {
     return this.tournaments.get(tournamentId) || null
+  }
+
+  getProgramStatus() {
+    return {
+      configuredProgramId: this.programId.raw ?? null,
+      programIdValid: Boolean(this.programId.programId),
+      deploymentChecked: Boolean(this.programStatus),
+      deployedOnCluster: this.programStatus?.deployed ?? false,
+      lamports: this.programStatus?.lamports ?? 0,
+      owner: this.programStatus?.owner ?? null,
+      rpcUrl: (this.connection as any)._rpcEndpoint,
+    }
   }
 }
 

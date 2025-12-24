@@ -47,6 +47,7 @@ export default function TournamentsPage() {
     totalPlayers: 0,
     totalPrizePool: 0,
   })
+  const [programStatus, setProgramStatus] = useState<ReturnType<SolArenaProgram["getProgramStatus"]> | null>(null)
 
   const [showRegistrationForm, setShowRegistrationForm] = useState(false)
   const [showCreateForm, setShowCreateForm] = useState(false)
@@ -68,15 +69,16 @@ export default function TournamentsPage() {
   })
 
   useEffect(() => {
-    if (connected) {
-      fetchTournaments()
-      const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com"
-      const program = new SolArenaProgram(rpcUrl)
-      program.initialize({ publicKey }).then(() => {
-        setSolanaProgram(program)
-        console.log("[v0] SolArena program initialized with wallet:", publicKey?.toString())
-      })
-    }
+    const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com"
+    const program = new SolArenaProgram(rpcUrl)
+    program.initialize(publicKey ? { publicKey } : null).then(() => {
+      setSolanaProgram(program)
+      setProgramStatus(program.getProgramStatus())
+      if (connected) {
+        fetchTournaments()
+      }
+      console.log("[v0] SolArena program initialized with wallet:", publicKey?.toString())
+    })
   }, [connected, publicKey])
 
   const createTournament = async (e: React.FormEvent) => {
@@ -401,6 +403,45 @@ export default function TournamentsPage() {
             Compete in high-stakes tournaments and climb the leaderboards
           </p>
         </div>
+
+        {programStatus && (
+          <Card className="max-w-4xl mx-auto border-2 border-border/60">
+            <CardHeader>
+              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <CardTitle className="text-lg">On-chain tournament escrow status</CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    RPC: {programStatus.rpcUrl} • Program ID:{" "}
+                    {programStatus.configuredProgramId || "not configured"}
+                  </p>
+                </div>
+                <span
+                  className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                    programStatus.deployedOnCluster
+                      ? "bg-green-500/10 text-green-500 border border-green-500/20"
+                      : "bg-yellow-500/10 text-yellow-500 border border-yellow-500/20"
+                  }`}
+                >
+                  {programStatus.deployedOnCluster ? "Program live on cluster" : "Program not detected on cluster"}
+                </span>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {programStatus.programIdValid ? (
+                <p className="text-sm text-muted-foreground">
+                  {programStatus.deployedOnCluster
+                    ? "Escrow PDA derivations will use the configured tournament program."
+                    : "Program ID is set, but no executable account was found at this address on the selected cluster. Deploy the program and retry."}
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Add a valid program ID via <code>NEXT_PUBLIC_TOURNAMENT_PROGRAM_ID</code>{" "}
+                  (or SOLARENA_TOURNAMENT_PROGRAM_ID) to activate escrow flows.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Action Buttons */}
         <div className="flex flex-wrap gap-4 justify-center">
