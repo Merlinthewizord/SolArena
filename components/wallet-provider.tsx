@@ -2,6 +2,8 @@
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react"
 import { useToast } from "@/hooks/use-toast"
+import { ProfileSignupModal, type ProfileData } from "./profile-signup-modal"
+import { supabase } from "@/lib/supabase/client"
 
 interface PhantomProvider {
   publicKey: { toString: () => string } | null
@@ -15,34 +17,63 @@ interface WalletContextType {
   publicKey: string | null
   connected: boolean
   connecting: boolean
+  profile: any | null
   connect: () => Promise<void>
   disconnect: () => Promise<void>
   getProvider: () => PhantomProvider | null
+  refreshProfile: () => Promise<void>
 }
 
 const WalletContext = createContext<WalletContextType>({
   publicKey: null,
   connected: false,
   connecting: false,
+  profile: null,
   connect: async () => {},
   disconnect: async () => {},
   getProvider: () => null,
+  refreshProfile: async () => {},
 })
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   const [publicKey, setPublicKey] = useState<string | null>(null)
   const [connected, setConnected] = useState(false)
   const [connecting, setConnecting] = useState(false)
+  const [showProfileModal, setShowProfileModal] = useState(false)
+  const [profile, setProfile] = useState<any | null>(null)
   const { toast } = useToast()
 
-  useEffect(() => {
-    // Check if user already has a profile
-    const storedProfile = localStorage.getItem("solArenaProfile")
-    if (storedProfile) {
-      const profile = JSON.parse(storedProfile)
-      setPublicKey(profile.walletAddress)
-      setConnected(true)
+  const refreshProfile = async () => {
+    if (!publicKey) return
+
+    const { data, error } = await supabase.from("player_profiles").select("*").eq("wallet_address", publicKey).single()
+
+    if (data && !error) {
+      setProfile(data)
     }
+  }
+
+  useEffect(() => {
+    const checkExistingProfile = async () => {
+      const provider = getPhantomProvider()
+      if (provider?.publicKey) {
+        const walletAddress = provider.publicKey.toString()
+
+        const { data, error } = await supabase
+          .from("player_profiles")
+          .select("*")
+          .eq("wallet_address", walletAddress)
+          .single()
+
+        if (data && !error) {
+          setPublicKey(walletAddress)
+          setConnected(true)
+          setProfile(data)
+        }
+      }
+    }
+
+    checkExistingProfile()
   }, [])
 
   const getPhantomProvider = (): PhantomProvider | null => {
@@ -55,20 +86,68 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return null
   }
 
-  const createProfile = async (walletAddress: string, signature: string) => {
-    const profile = {
-      walletAddress,
-      signature,
-      createdAt: new Date().toISOString(),
-      username: `Player_${walletAddress.slice(0, 6)}`,
-      wins: 0,
-      losses: 0,
-      totalEarnings: 0,
+  const createProfile = async (walletAddress: string, signature: string, profileData: ProfileData) => {
+    const { data, error } = await supabase
+      .from("player_profiles")
+      .insert({
+        wallet_address: walletAddress,
+        username: profileData.username,
+        bio: profileData.bio,
+        location: profileData.location,
+        favorite_games: profileData.favoriteGames,
+        profile_image_url: profileData.profileImageUrl,
+        signature: signature,
+        wins: 0,
+        losses: 0,
+        total_earnings: 0,
+      })
+      .select()
+      .single()
+
+    if (error) {
+      console.error("[v0] Error saving profile to database:", error)
+      throw new Error("Failed to save profile to database")
     }
 
-    localStorage.setItem("solArenaProfile", JSON.stringify(profile))
-    console.log("[v0] Profile created:", profile)
-    return profile
+    console.log("[v0] Profile created in database:", data)
+    return data
+  }
+
+  const handleProfileComplete = async (profileData: ProfileData) => {
+    try {
+      const provider = getPhantomProvider()
+      if (!provider) {
+        throw new Error("Phantom wallet not found")
+      }
+
+      let walletAddress: string
+      if (!provider.publicKey) {
+        const response = await provider.connect()
+        walletAddress = response.publicKey.toString()
+      } else {
+        walletAddress = provider.publicKey.toString()
+      }
+
+      const message = `Sign this message to create your Sol Arena profile.\n\nWallet: ${walletAddress}\nUsername: ${profileData.username}\nTimestamp: ${new Date().toISOString()}`
+      const encodedMessage = new TextEncoder().encode(message)
+
+      const { signature } = await provider.signMessage(encodedMessage)
+      const signatureBase64 = Buffer.from(signature).toString("base64")
+
+      const profile = await createProfile(walletAddress, signatureBase64, profileData)
+
+      setPublicKey(walletAddress)
+      setConnected(true)
+      setProfile(profile)
+
+      toast({
+        title: "Profile Created!",
+        description: `Welcome to Sol Arena, ${profile.username}!`,
+      })
+    } catch (error) {
+      console.error("[v0] Profile creation error:", error)
+      throw error
+    }
   }
 
   const connect = async () => {
@@ -91,35 +170,22 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const response = await provider.connect()
       const walletAddress = response.publicKey.toString()
 
-      // Check if profile already exists
-      const existingProfile = localStorage.getItem("solArenaProfile")
+      const { data: existingProfile, error } = await supabase
+        .from("player_profiles")
+        .select("*")
+        .eq("wallet_address", walletAddress)
+        .single()
 
-      if (existingProfile) {
-        const profile = JSON.parse(existingProfile)
-        setPublicKey(profile.walletAddress)
-        setConnected(true)
-        toast({
-          title: "Welcome Back!",
-          description: `Connected as ${profile.username}`,
-        })
-      } else {
-        // Request signature to create profile
-        const message = `Sign this message to create your Sol Arena profile.\n\nWallet: ${walletAddress}\nTimestamp: ${new Date().toISOString()}`
-        const encodedMessage = new TextEncoder().encode(message)
-
-        const { signature } = await provider.signMessage(encodedMessage)
-        const signatureBase64 = Buffer.from(signature).toString("base64")
-
-        // Create profile with signature
-        const profile = await createProfile(walletAddress, signatureBase64)
-
+      if (existingProfile && !error) {
         setPublicKey(walletAddress)
         setConnected(true)
-
+        setProfile(existingProfile)
         toast({
-          title: "Profile Created!",
-          description: `Welcome to Sol Arena, ${profile.username}!`,
+          title: "Welcome Back!",
+          description: `Connected as ${existingProfile.username}`,
         })
+      } else {
+        setShowProfileModal(true)
       }
     } catch (error) {
       console.error("[v0] Wallet connection error:", error)
@@ -142,6 +208,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       setPublicKey(null)
       setConnected(false)
+      setProfile(null)
 
       toast({
         title: "Disconnected",
@@ -154,9 +221,23 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   return (
     <WalletContext.Provider
-      value={{ publicKey, connected, connecting, connect, disconnect, getProvider: getPhantomProvider }}
+      value={{
+        publicKey,
+        connected,
+        connecting,
+        profile,
+        connect,
+        disconnect,
+        getProvider: getPhantomProvider,
+        refreshProfile,
+      }}
     >
       {children}
+      <ProfileSignupModal
+        open={showProfileModal}
+        onOpenChange={setShowProfileModal}
+        onComplete={handleProfileComplete}
+      />
     </WalletContext.Provider>
   )
 }

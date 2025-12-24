@@ -1,7 +1,6 @@
 @import "tailwindcss";
-@import "tw-animate-css";
 
-@custom-variant dark (&:is(.dark *));
+/* Removed @import "tw-animate-css" and @custom-variant directives that were causing parsing errors */
 
 :root {
   /* Dark crypto gaming theme with bold accents */

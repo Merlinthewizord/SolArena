@@ -4,51 +4,129 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Trophy, Wallet, Users, Zap, Shield, ArrowRight, Gamepad2 } from "lucide-react"
 import { useWallet } from "@/components/wallet-provider"
+import { VideoBackground } from "@/components/video-background"
 import Link from "next/link"
+import { useState, useEffect } from "react"
+import { Navigation } from "@/components/navigation"
 
-export default function HomePage() {
-  const { publicKey, connected, connecting, connect, disconnect } = useWallet()
+interface Stats {
+  totalPlayers: number
+  totalPrizes: number
+  winRate: number
+  gameCounts: {
+    fortnite: number
+    theFinals: number
+    valorant: number
+    cs2: number
+    leagueOfLegends: number
+    dota2: number
+    callOfDuty: number
+    apexLegends: number
+    rocketLeague: number
+    streetFighter6: number
+    tekken8: number
+    superSmashBros: number
+  }
+  avgEntry: string
+  avgPrize: string
+  totalTournaments: number
+}
+
+export default function Home() {
+  const { connected, profile, connect } = useWallet() // Added connect to destructured values
+  const [stats, setStats] = useState<Stats>({
+    totalPlayers: 0,
+    totalPrizes: 0,
+    winRate: 0,
+    gameCounts: {
+      fortnite: 0,
+      theFinals: 0,
+      valorant: 0,
+      cs2: 0,
+      leagueOfLegends: 0,
+      dota2: 0,
+      callOfDuty: 0,
+      apexLegends: 0,
+      rocketLeague: 0,
+      streetFighter6: 0,
+      tekken8: 0,
+      superSmashBros: 0,
+    },
+    avgEntry: "0.1",
+    avgPrize: "0",
+    totalTournaments: 0,
+  })
+  const [liveTournament, setLiveTournament] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function fetchStats() {
+      try {
+        const response = await fetch("/api/stats")
+        if (!response.ok) {
+          console.log("[v0] Stats API returned error:", response.status)
+          setLoading(false)
+          return
+        }
+        const data = await response.json()
+        setStats({
+          totalPlayers: Number(data.totalPlayers) || 0,
+          totalPrizes: Number(data.totalPrizes) || 0,
+          winRate: Number(data.winRate) || 0,
+          gameCounts: {
+            fortnite: Number(data.gameCounts?.fortnite) || 0,
+            theFinals: Number(data.gameCounts?.theFinals) || 0,
+            valorant: Number(data.gameCounts?.valorant) || 0,
+            cs2: Number(data.gameCounts?.cs2) || 0,
+            leagueOfLegends: Number(data.gameCounts?.leagueOfLegends) || 0,
+            dota2: Number(data.gameCounts?.dota2) || 0,
+            callOfDuty: Number(data.gameCounts?.callOfDuty) || 0,
+            apexLegends: Number(data.gameCounts?.apexLegends) || 0,
+            rocketLeague: Number(data.gameCounts?.rocketLeague) || 0,
+            streetFighter6: Number(data.gameCounts?.streetFighter6) || 0,
+            tekken8: Number(data.gameCounts?.tekken8) || 0,
+            superSmashBros: Number(data.gameCounts?.superSmashBros) || 0,
+          },
+          avgEntry: data.avgEntry || "0.1",
+          avgPrize: data.avgPrize || "0",
+          totalTournaments: Number(data.totalTournaments) || 0,
+        })
+      } catch (error) {
+        console.error("[v0] Error fetching stats:", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    async function fetchLiveTournament() {
+      try {
+        const response = await fetch("/api/tournaments?cache=" + Date.now())
+        if (!response.ok) {
+          console.log("[v0] Tournaments API returned error:", response.status)
+          return
+        }
+        const tournaments = await response.json()
+
+        if (Array.isArray(tournaments)) {
+          const openTournament = tournaments.find((t: any) => t.state === "pending" || t.state === "underway")
+          if (openTournament) {
+            setLiveTournament(openTournament)
+          }
+        }
+      } catch (error) {
+        console.error("[v0] Error fetching live tournament:", error)
+      }
+    }
+
+    fetchStats()
+    fetchLiveTournament()
+  }, [])
 
   return (
     <div className="min-h-screen">
-      {/* Navigation */}
-      <nav className="fixed top-0 w-full z-50 border-b border-border/40 bg-background/80 backdrop-blur-lg">
-        <div className="container mx-auto px-4 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                <Trophy className="w-5 h-5 text-primary-foreground" />
-              </div>
-              <span className="text-xl font-bold">Sol Arena</span>
-            </div>
-            <div className="hidden md:flex items-center gap-8">
-              <Link
-                href="/tournaments"
-                className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Tournaments
-              </Link>
-              <a href="#how-it-works" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                How It Works
-              </a>
-              <a href="#faq" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                FAQ
-              </a>
-            </div>
-            {connected ? (
-              <Button size="sm" variant="outline" onClick={disconnect}>
-                <Wallet className="w-4 h-4 mr-2" />
-                {publicKey?.slice(0, 4)}...{publicKey?.slice(-4)}
-              </Button>
-            ) : (
-              <Button size="sm" onClick={connect} disabled={connecting}>
-                <Wallet className="w-4 h-4 mr-2" />
-                {connecting ? "Connecting..." : "Connect Wallet"}
-              </Button>
-            )}
-          </div>
-        </div>
-      </nav>
+      <VideoBackground />
+
+      <Navigation />
 
       {/* Hero Section */}
       <section className="relative pt-32 pb-20 px-4 overflow-hidden">
@@ -73,13 +151,17 @@ export default function HomePage() {
 
               <div className="flex flex-col sm:flex-row gap-4">
                 {connected ? (
-                  <Button size="lg" className="text-base">
-                    View My Profile
-                    <ArrowRight className="w-4 h-4 ml-2" />
+                  <Button size="lg" className="text-base" asChild>
+                    <Link href="/dashboard">
+                      View My Profile
+                      <ArrowRight className="w-4 h-4 ml-2" />
+                    </Link>
                   </Button>
                 ) : (
-                  <Button size="lg" className="text-base" onClick={connect} disabled={connecting}>
-                    {connecting ? "Connecting..." : "Get Started"}
+                  <Button size="lg" className="text-base" onClick={connect} disabled={false}>
+                    {" "}
+                    {/* Connected to wallet connect function */}
+                    Get Started
                     <ArrowRight className="w-4 h-4 ml-2" />
                   </Button>
                 )}
@@ -90,60 +172,100 @@ export default function HomePage() {
 
               <div className="flex items-center gap-8 pt-4">
                 <div>
-                  <div className="text-3xl font-bold text-primary">2.4K+</div>
+                  <div className="text-3xl font-bold text-primary">
+                    {loading ? "..." : (stats.totalPlayers || 0).toLocaleString()}
+                    {!loading && stats.totalPlayers > 0 && "+"}
+                  </div>
                   <div className="text-sm text-muted-foreground">Active Players</div>
                 </div>
                 <div className="w-px h-12 bg-border" />
                 <div>
-                  <div className="text-3xl font-bold text-primary">15 SOL</div>
+                  <div className="text-3xl font-bold text-primary">
+                    {loading ? "..." : `${(stats.totalPrizes || 0).toFixed(1)} SOL`}
+                  </div>
                   <div className="text-sm text-muted-foreground">Total Prizes</div>
                 </div>
                 <div className="w-px h-12 bg-border" />
                 <div>
-                  <div className="text-3xl font-bold text-primary">98%</div>
+                  <div className="text-3xl font-bold text-primary">
+                    {loading ? "..." : `${(stats.winRate || 0).toFixed(0)}%`}
+                  </div>
                   <div className="text-sm text-muted-foreground">Win Rate</div>
                 </div>
               </div>
             </div>
 
             <div className="flex-1 relative">
-              <div className="relative w-full max-w-md mx-auto">
-                <div className="absolute inset-0 bg-primary/20 rounded-3xl blur-3xl" />
-                <Card className="relative p-6 border-2 border-primary/20 bg-card/50 backdrop-blur">
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Live Tournament</span>
-                      <span className="px-2 py-1 rounded-full bg-primary/20 text-primary text-xs font-medium">
-                        Active
-                      </span>
-                    </div>
-                    <div className="space-y-2">
-                      <h3 className="text-2xl font-bold">Battle Royale #42</h3>
-                      <p className="text-sm text-muted-foreground">Entry: 0.1 SOL</p>
-                    </div>
-                    <div className="pt-4 border-t border-border">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm text-muted-foreground">Prize Pool</span>
-                        <span className="text-2xl font-bold text-primary">2.4 SOL</span>
+              {liveTournament ? (
+                <div className="relative w-full max-w-md mx-auto">
+                  <div className="absolute inset-0 bg-primary/20 rounded-3xl blur-3xl" />
+                  <Card className="relative p-6 border-2 border-primary/20 bg-card/50 backdrop-blur">
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">Live Tournament</span>
+                        <span className="px-2 py-1 rounded-full bg-primary/20 text-primary text-xs font-medium">
+                          {liveTournament.state === "pending" ? "Open" : "Active"}
+                        </span>
                       </div>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Users className="w-4 h-4" />
-                        <span>24 players entered</span>
+                      <div className="space-y-2">
+                        <h3 className="text-2xl font-bold">{liveTournament.name}</h3>
+                        <p className="text-sm text-muted-foreground">Entry: {liveTournament.entry_fee || "0.1"} SOL</p>
                       </div>
+                      <div className="pt-4 border-t border-border">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm text-muted-foreground">Prize Pool</span>
+                          <span className="text-2xl font-bold text-primary">
+                            {(
+                              (liveTournament.participants_count || 0) *
+                              Number.parseFloat(liveTournament.entry_fee || "0.1")
+                            ).toFixed(1)}{" "}
+                            SOL
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Users className="w-4 h-4" />
+                          <span>{liveTournament.participants_count || 0} players entered</span>
+                        </div>
+                      </div>
+                      <Link href="/tournaments">
+                        <Button className="w-full" size="lg">
+                          Join Tournament
+                        </Button>
+                      </Link>
                     </div>
-                    <Button className="w-full" size="lg">
-                      Join Tournament
-                    </Button>
-                  </div>
-                </Card>
-              </div>
+                  </Card>
+                </div>
+              ) : (
+                <div className="relative w-full max-w-md mx-auto">
+                  <div className="absolute inset-0 bg-primary/20 rounded-3xl blur-3xl" />
+                  <Card className="relative p-6 border-2 border-primary/20 bg-card/50 backdrop-blur">
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">Live Tournament</span>
+                        <span className="px-2 py-1 rounded-full bg-muted text-muted-foreground text-xs font-medium">
+                          No Active
+                        </span>
+                      </div>
+                      <div className="space-y-2">
+                        <h3 className="text-2xl font-bold">No tournaments running</h3>
+                        <p className="text-sm text-muted-foreground">Check back soon for new tournaments</p>
+                      </div>
+                      <Link href="/tournaments">
+                        <Button className="w-full bg-transparent" size="lg" variant="outline">
+                          View All Tournaments
+                        </Button>
+                      </Link>
+                    </div>
+                  </Card>
+                </div>
+              )}
             </div>
           </div>
         </div>
       </section>
 
       {/* Available Games */}
-      <section className="py-20 px-4 bg-secondary/30">
+      <section className="py-20 px-4 bg-secondary/30 relative z-10">
         <div className="container mx-auto max-w-6xl">
           <div className="text-center space-y-4 mb-12">
             <h2 className="text-4xl lg:text-5xl font-bold text-balance">Available Games</h2>
@@ -152,36 +274,172 @@ export default function HomePage() {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
-            <Card className="p-8 space-y-4 bg-card border-2 border-border hover:border-primary/50 transition-all hover:scale-105">
-              <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center">
-                <Gamepad2 className="w-8 h-8 text-primary" />
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
+            <Card className="p-6 space-y-3 bg-card border-2 border-border hover:border-primary/50 transition-all hover:scale-105">
+              <div className="w-14 h-14 bg-primary/10 rounded-xl flex items-center justify-center">
+                <Gamepad2 className="w-7 h-7 text-primary" />
               </div>
-              <div className="space-y-2">
-                <h3 className="text-2xl font-bold">Fortnite</h3>
-                <p className="text-muted-foreground leading-relaxed">
-                  Battle Royale tournaments with instant SOL rewards
-                </p>
+              <div className="space-y-1">
+                <h3 className="text-xl font-bold">Fortnite</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">Battle Royale tournaments</p>
               </div>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Users className="w-4 h-4" />
-                <span>1,248 active players</span>
+                <span>{loading ? "..." : `${stats.gameCounts.fortnite || 0} players`}</span>
               </div>
             </Card>
 
-            <Card className="p-8 space-y-4 bg-card border-2 border-border hover:border-primary/50 transition-all hover:scale-105">
-              <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center">
-                <Gamepad2 className="w-8 h-8 text-primary" />
+            <Card className="p-6 space-y-3 bg-card border-2 border-border hover:border-primary/50 transition-all hover:scale-105">
+              <div className="w-14 h-14 bg-primary/10 rounded-xl flex items-center justify-center">
+                <Gamepad2 className="w-7 h-7 text-primary" />
               </div>
-              <div className="space-y-2">
-                <h3 className="text-2xl font-bold">The Finals</h3>
-                <p className="text-muted-foreground leading-relaxed">
-                  Intense team-based competitions for the ultimate prize
-                </p>
+              <div className="space-y-1">
+                <h3 className="text-xl font-bold">The Finals</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">Team-based competitions</p>
               </div>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Users className="w-4 h-4" />
-                <span>842 active players</span>
+                <span>{loading ? "..." : `${stats.gameCounts.theFinals || 0} players`}</span>
+              </div>
+            </Card>
+
+            <Card className="p-6 space-y-3 bg-card border-2 border-border hover:border-primary/50 transition-all hover:scale-105">
+              <div className="w-14 h-14 bg-primary/10 rounded-xl flex items-center justify-center">
+                <Gamepad2 className="w-7 h-7 text-primary" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-xl font-bold">Valorant</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">Tactical 5v5 shooter tournaments</p>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Users className="w-4 h-4" />
+                <span>Coming Soon</span>
+              </div>
+            </Card>
+
+            <Card className="p-6 space-y-3 bg-card border-2 border-border hover:border-primary/50 transition-all hover:scale-105">
+              <div className="w-14 h-14 bg-primary/10 rounded-xl flex items-center justify-center">
+                <Gamepad2 className="w-7 h-7 text-primary" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-xl font-bold">CS2</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">Counter-Strike 2 competitive matches</p>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Users className="w-4 h-4" />
+                <span>Coming Soon</span>
+              </div>
+            </Card>
+
+            <Card className="p-6 space-y-3 bg-card border-2 border-border hover:border-primary/50 transition-all hover:scale-105">
+              <div className="w-14 h-14 bg-primary/10 rounded-xl flex items-center justify-center">
+                <Gamepad2 className="w-7 h-7 text-primary" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-xl font-bold">League of Legends</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">MOBA tournaments and leagues</p>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Users className="w-4 h-4" />
+                <span>Coming Soon</span>
+              </div>
+            </Card>
+
+            <Card className="p-6 space-y-3 bg-card border-2 border-border hover:border-primary/50 transition-all hover:scale-105">
+              <div className="w-14 h-14 bg-primary/10 rounded-xl flex items-center justify-center">
+                <Gamepad2 className="w-7 h-7 text-primary" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-xl font-bold">Dota 2</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">Strategic MOBA competitions</p>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Users className="w-4 h-4" />
+                <span>Coming Soon</span>
+              </div>
+            </Card>
+
+            <Card className="p-6 space-y-3 bg-card border-2 border-border hover:border-primary/50 transition-all hover:scale-105">
+              <div className="w-14 h-14 bg-primary/10 rounded-xl flex items-center justify-center">
+                <Gamepad2 className="w-7 h-7 text-primary" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-xl font-bold">Call of Duty</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">Warzone and multiplayer tournaments</p>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Users className="w-4 h-4" />
+                <span>Coming Soon</span>
+              </div>
+            </Card>
+
+            <Card className="p-6 space-y-3 bg-card border-2 border-border hover:border-primary/50 transition-all hover:scale-105">
+              <div className="w-14 h-14 bg-primary/10 rounded-xl flex items-center justify-center">
+                <Gamepad2 className="w-7 h-7 text-primary" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-xl font-bold">Apex Legends</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">Battle Royale squad competitions</p>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Users className="w-4 h-4" />
+                <span>Coming Soon</span>
+              </div>
+            </Card>
+
+            <Card className="p-6 space-y-3 bg-card border-2 border-border hover:border-primary/50 transition-all hover:scale-105">
+              <div className="w-14 h-14 bg-primary/10 rounded-xl flex items-center justify-center">
+                <Gamepad2 className="w-7 h-7 text-primary" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-xl font-bold">Rocket League</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">Car soccer tournaments</p>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Users className="w-4 h-4" />
+                <span>Coming Soon</span>
+              </div>
+            </Card>
+
+            <Card className="p-6 space-y-3 bg-card border-2 border-border hover:border-primary/50 transition-all hover:scale-105">
+              <div className="w-14 h-14 bg-primary/10 rounded-xl flex items-center justify-center">
+                <Gamepad2 className="w-7 h-7 text-primary" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-xl font-bold">Street Fighter 6</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">Fighting game championships</p>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Users className="w-4 h-4" />
+                <span>Coming Soon</span>
+              </div>
+            </Card>
+
+            <Card className="p-6 space-y-3 bg-card border-2 border-border hover:border-primary/50 transition-all hover:scale-105">
+              <div className="w-14 h-14 bg-primary/10 rounded-xl flex items-center justify-center">
+                <Gamepad2 className="w-7 h-7 text-primary" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-xl font-bold">Tekken 8</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">3D fighting game tournaments</p>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Users className="w-4 h-4" />
+                <span>Coming Soon</span>
+              </div>
+            </Card>
+
+            <Card className="p-6 space-y-3 bg-card border-2 border-border hover:border-primary/50 transition-all hover:scale-105">
+              <div className="w-14 h-14 bg-primary/10 rounded-xl flex items-center justify-center">
+                <Gamepad2 className="w-7 h-7 text-primary" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-xl font-bold">Super Smash Bros.</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">Platform fighter tournaments</p>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Users className="w-4 h-4" />
+                <span>Coming Soon</span>
               </div>
             </Card>
           </div>
@@ -189,7 +447,7 @@ export default function HomePage() {
       </section>
 
       {/* How It Works */}
-      <section id="how-it-works" className="py-20 px-4 bg-secondary/30">
+      <section id="how-it-works" className="py-20 px-4 bg-secondary/30 relative z-10">
         <div className="container mx-auto max-w-6xl">
           <div className="text-center space-y-4 mb-16">
             <h2 className="text-4xl lg:text-5xl font-bold text-balance">How Sol Arena Works</h2>
@@ -248,7 +506,7 @@ export default function HomePage() {
       </section>
 
       {/* Features */}
-      <section className="py-20 px-4">
+      <section className="py-20 px-4 relative z-10">
         <div className="container mx-auto max-w-6xl">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div className="space-y-8">
@@ -303,19 +561,21 @@ export default function HomePage() {
               <div className="relative grid grid-cols-2 gap-4">
                 <Card className="p-6 space-y-2 bg-card border-2 border-border">
                   <div className="text-sm text-muted-foreground">Avg Entry</div>
-                  <div className="text-3xl font-bold text-primary">0.15 SOL</div>
+                  <div className="text-3xl font-bold text-primary">{loading ? "..." : `${stats.avgEntry} SOL`}</div>
                 </Card>
                 <Card className="p-6 space-y-2 bg-card border-2 border-border">
                   <div className="text-sm text-muted-foreground">Avg Prize</div>
-                  <div className="text-3xl font-bold text-primary">3.2 SOL</div>
+                  <div className="text-3xl font-bold text-primary">{loading ? "..." : `${stats.avgPrize} SOL`}</div>
                 </Card>
                 <Card className="p-6 space-y-2 bg-card border-2 border-border">
                   <div className="text-sm text-muted-foreground">Total Players</div>
-                  <div className="text-3xl font-bold">2,431</div>
+                  <div className="text-3xl font-bold">
+                    {loading ? "..." : (stats.totalPlayers || 0).toLocaleString()}
+                  </div>
                 </Card>
                 <Card className="p-6 space-y-2 bg-card border-2 border-border">
                   <div className="text-sm text-muted-foreground">Tournaments</div>
-                  <div className="text-3xl font-bold">158</div>
+                  <div className="text-3xl font-bold">{loading ? "..." : stats.totalTournaments}</div>
                 </Card>
               </div>
             </div>
@@ -324,7 +584,7 @@ export default function HomePage() {
       </section>
 
       {/* CTA Section */}
-      <section className="py-20 px-4">
+      <section className="py-20 px-4 relative z-10">
         <div className="container mx-auto max-w-4xl">
           <Card className="relative overflow-hidden border-2 border-primary/20 bg-gradient-to-br from-card to-secondary/30">
             <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/20 via-transparent to-transparent" />
@@ -336,13 +596,15 @@ export default function HomePage() {
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
                 {connected ? (
-                  <Button size="lg" className="text-base">
-                    View My Dashboard
+                  <Button size="lg" className="text-base" asChild>
+                    <Link href="/dashboard">View My Dashboard</Link>
                   </Button>
                 ) : (
-                  <Button size="lg" className="text-base" onClick={connect} disabled={connecting}>
+                  <Button size="lg" className="text-base" onClick={connect} disabled={false}>
+                    {" "}
+                    {/* Connected to wallet connect function */}
                     <Wallet className="w-5 h-5 mr-2" />
-                    {connecting ? "Connecting..." : "Connect Wallet"}
+                    Connect Wallet
                   </Button>
                 )}
                 <Button size="lg" variant="outline" className="text-base bg-transparent" asChild>
@@ -355,7 +617,7 @@ export default function HomePage() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-border py-12 px-4">
+      <footer className="border-t border-border py-12 px-4 relative z-10">
         <div className="container mx-auto max-w-6xl">
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="flex items-center gap-2">
@@ -365,6 +627,12 @@ export default function HomePage() {
               <span className="text-lg font-bold">Sol Arena</span>
             </div>
             <div className="flex gap-6 text-sm text-muted-foreground">
+              <Link href="/mission" className="hover:text-foreground transition-colors">
+                Mission
+              </Link>
+              <Link href="/championship" className="hover:text-foreground transition-colors">
+                Championship
+              </Link>
               <a href="#" className="hover:text-foreground transition-colors">
                 About
               </a>
