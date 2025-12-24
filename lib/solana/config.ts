@@ -1,6 +1,7 @@
 import { Connection, PublicKey } from "@solana/web3.js"
 
 const DEFAULT_RPC_URL = "https://api.devnet.solana.com"
+const SOLARENA_TOURNAMENT_PROGRAM_ID = "2hw2SxeLPBvjDJH5BRutQGR2Z7aotPgR4BFKC9HkJBCo"
 
 export function getSolanaRpcUrl() {
   return process.env.NEXT_PUBLIC_SOLANA_RPC_URL || process.env.SOLANA_RPC_URL || DEFAULT_RPC_URL
