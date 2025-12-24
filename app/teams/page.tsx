@@ -16,8 +16,6 @@ import Link from "next/link"
 import { createBrowserClient } from "@/lib/supabase/client"
 import { VideoBackground } from "@/components/video-background"
 import { useToast } from "@/hooks/use-toast"
-import { getSolanaConnection, createTeamToken } from "@/lib/meteora-dbc"
-import { PublicKey } from "@solana/web3.js"
 
 interface Team {
   id: string
@@ -36,6 +34,7 @@ interface Team {
   is_verified: boolean
   created_at: string
   bonding_curve_address: string
+  status: string
 }
 
 export default function TeamsPage() {
@@ -102,74 +101,83 @@ export default function TeamsPage() {
       return
     }
 
+    if (formData.name.length > 32) {
+      toast({
+        title: "Team name too long",
+        description: "Team name must be 32 characters or less",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (formData.symbol.length > 10) {
+      toast({
+        title: "Token symbol too long",
+        description: "Token symbol must be 10 characters or less",
+        variant: "destructive",
+      })
+      return
+    }
+
     setCreating(true)
 
     try {
-      console.log("[v0] Starting real team token creation...")
+      const { data: existingTeam, error: checkError } = await supabase
+        .from("teams")
+        .select("name")
+        .eq("name", formData.name)
+        .single()
 
-      const provider = (window as any).phantom?.solana
-      if (!provider) {
-        throw new Error("Phantom wallet not found")
+      if (existingTeam) {
+        toast({
+          title: "Team name already exists",
+          description: "Please choose a different team name",
+          variant: "destructive",
+        })
+        setCreating(false)
+        return
+      }
+
+      const { data: existingSymbol } = await supabase
+        .from("teams")
+        .select("symbol")
+        .eq("symbol", formData.symbol)
+        .single()
+
+      if (existingSymbol) {
+        toast({
+          title: "Token symbol already exists",
+          description: "Please choose a different token symbol",
+          variant: "destructive",
+        })
+        setCreating(false)
+        return
       }
 
       const logoToSave = logoPreview || formData.logo_url || "/abstract-team-logo.png"
 
-      const connection = getSolanaConnection()
-      const creatorPublicKey = new PublicKey(profile.wallet_address)
-
-      toast({
-        title: "Creating team token...",
-        description: "Please approve the transaction in your wallet",
-      })
-
-      const tokenResult = await createTeamToken(
-        connection,
-        {
-          teamName: formData.name,
-          symbol: formData.symbol,
-          description: formData.description,
-          imageUri: logoToSave,
-          creatorWallet: creatorPublicKey,
-          payerWallet: creatorPublicKey,
-        },
-        async (tx) => {
-          const signed = await provider.signTransaction(tx)
-          return signed
-        },
-      )
-
-      console.log("[v0] Token created:", tokenResult)
-
-      const { data, error } = await supabase
+      const { data: newTeam, error } = await supabase
         .from("teams")
         .insert({
           name: formData.name,
           symbol: formData.symbol,
           description: formData.description,
           logo_url: logoToSave,
-          team_mint: tokenResult.teamMint,
-          bonding_curve_address: tokenResult.bondingCurveAddress,
           creator_wallet: profile.wallet_address,
           game: formData.game,
           region: formData.region,
+          status: "draft",
         })
         .select()
+        .single()
 
       if (error) {
         throw error
       }
 
       toast({
-        title: "Team token deployed!",
-        description: `${formData.name} ($${formData.symbol}) has been created on Solana. View on Solscan`,
-        action: {
-          label: "View Transaction",
-          onClick: () => {
-            const network = process.env.NEXT_PUBLIC_SOLANA_NETWORK || "devnet"
-            const cluster = network === "mainnet-beta" ? "" : "?cluster=devnet"
-            window.open(`https://solscan.io/tx/${tokenResult.transactionSignature}${cluster}`, "_blank")
-          },
-        },
+        title: "Team created!",
+        description: `${formData.name} created as draft. You can launch the token from the team page.`,
       })
 
       setShowCreateForm(false)
@@ -186,9 +194,18 @@ export default function TeamsPage() {
       fetchTeams()
     } catch (error: any) {
       console.error("[v0] Error creating team:", error)
+
+      let errorMessage = "Failed to create team. Please try again."
+
+      if (error.message?.includes("duplicate key")) {
+        errorMessage = "A team with this name or symbol already exists. Please choose different values."
+      } else if (error.message) {
+        errorMessage = error.message
+      }
+
       toast({
-        title: "Error creating team token",
-        description: error.message || "Failed to create team token. Please try again.",
+        title: "Error creating team",
+        description: errorMessage,
         variant: "destructive",
       })
     } finally {
@@ -271,8 +288,10 @@ export default function TeamsPage() {
                     placeholder="e.g., Solana Dragons"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    maxLength={32}
                     required
                   />
+                  <p className="text-xs text-muted-foreground">{formData.name.length}/32 characters</p>
                 </div>
 
                 <div className="space-y-2">
@@ -285,6 +304,7 @@ export default function TeamsPage() {
                     maxLength={10}
                     required
                   />
+                  <p className="text-xs text-muted-foreground">{formData.symbol.length}/10 characters</p>
                 </div>
               </div>
 

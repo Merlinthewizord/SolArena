@@ -8,13 +8,22 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Trophy, Users, ArrowLeft, Wallet, Coins, Target, Shield } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Trophy, Users, ArrowLeft, Wallet, Coins, Target, Shield, Rocket, ExternalLink } from "lucide-react"
 import { useWallet } from "@/components/wallet-provider"
 import Link from "next/link"
 import { createBrowserClient } from "@/lib/supabase/client"
 import { VideoBackground } from "@/components/video-background"
 import { useToast } from "@/hooks/use-toast"
 import { Navigation } from "@/components/navigation"
+import { TokenChart } from "@/components/token-chart"
 
 interface Team {
   id: string
@@ -32,6 +41,11 @@ interface Team {
   region: string
   is_verified: boolean
   created_at: string
+  status: string | null
+  bonding_curve_address: string | null
+  metadata_uri: string | null
+  launch_tx: string | null
+  pool_address: string | null // New field
 }
 
 interface TeamMember {
@@ -60,6 +74,8 @@ export default function TeamDetailPage() {
   const [loading, setLoading] = useState(true)
   const [stakeAmount, setStakeAmount] = useState("")
   const [staking, setStaking] = useState(false)
+  const [showLaunchDialog, setShowLaunchDialog] = useState(false)
+  const [launching, setLaunching] = useState(false)
   const supabase = createBrowserClient()
 
   useEffect(() => {
@@ -186,6 +202,57 @@ export default function TeamDetailPage() {
     }
   }
 
+  const handleLaunchToken = async () => {
+    if (!team || !profile) return
+
+    setLaunching(true)
+
+    try {
+      console.log("[v0] Launching team token via server API...")
+
+      const response = await fetch(`/api/teams/${team.id}/launch`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({}),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to launch token")
+      }
+
+      console.log("[v0] Token launched successfully:", result)
+
+      toast({
+        title: "Team token launched!",
+        description: `${team.name} ($${team.symbol}) is now live with Meteora bonding curve!`,
+        action: result.txSignature
+          ? {
+              label: "View Transaction",
+              onClick: () => {
+                window.open(`https://solscan.io/tx/${result.txSignature}`, "_blank")
+              },
+            }
+          : undefined,
+      })
+
+      setShowLaunchDialog(false)
+      fetchTeamData()
+    } catch (error: any) {
+      console.error("[v0] Error launching token:", error)
+      toast({
+        title: "Error launching token",
+        description: error.message || "Failed to launch team token. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setLaunching(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -212,11 +279,13 @@ export default function TeamDetailPage() {
       ? ((team.total_wins / (team.total_wins + team.total_losses)) * 100).toFixed(1)
       : "0.0"
 
+  const isCreator = profile?.wallet_address === team?.creator_wallet
+  const isDraft = team?.status === "draft" || team?.status === null
+
   return (
     <div className="min-h-screen">
       <VideoBackground />
 
-      {/* Navigation */}
       <Navigation />
 
       <div className="container mx-auto px-4 lg:px-8 py-24 relative z-10">
@@ -229,6 +298,49 @@ export default function TeamDetailPage() {
             </Link>
           </Button>
         </div>
+
+        {isCreator && isDraft && (
+          <Card className="p-6 mb-6 bg-gradient-to-br from-primary/20 to-primary/10 backdrop-blur border-2 border-primary/40">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-xl font-bold mb-2 flex items-center gap-2">
+                  <Rocket className="w-5 h-5" />
+                  Ready to Launch Your Team Token?
+                </h3>
+                <p className="text-muted-foreground">
+                  Deploy your team token on Solana with a Meteora bonding curve. This action is irreversible.
+                </p>
+              </div>
+              <Button size="lg" onClick={() => setShowLaunchDialog(true)} className="gap-2 whitespace-nowrap">
+                <Rocket className="w-5 h-5" />
+                Launch Team Token
+              </Button>
+            </div>
+          </Card>
+        )}
+
+        {team?.status === "live" && team.launch_tx && (
+          <Card className="p-4 mb-6 bg-card/50 backdrop-blur border-2 border-primary/20">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm">
+                <Badge variant="default" className="gap-1">
+                  <Shield className="w-3 h-3" />
+                  Live
+                </Badge>
+                <span className="text-muted-foreground">Token launched on-chain</span>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => window.open(`https://solscan.io/tx/${team.launch_tx}`, "_blank")}
+                className="gap-2"
+              >
+                <ExternalLink className="w-4 h-4" />
+                View Launch TX
+              </Button>
+            </div>
+          </Card>
+        )}
 
         {/* Team Header */}
         <Card className="p-8 mb-8 bg-gradient-to-br from-card/80 to-secondary/30 backdrop-blur border-2 border-primary/20">
@@ -267,6 +379,19 @@ export default function TeamDetailPage() {
             </div>
           </div>
         </Card>
+
+        {/* Token Chart Section for live teams */}
+        {team?.status === "live" && team.pool_address && team.bonding_curve_address && (
+          <div className="mb-8">
+            <h2 className="text-3xl font-bold mb-6">Token Trading</h2>
+            <TokenChart
+              poolAddress={team.pool_address}
+              bondingCurveAddress={team.bonding_curve_address}
+              tokenSymbol={team.symbol}
+              tokenName={team.name}
+            />
+          </div>
+        )}
 
         {/* Stats Grid */}
         <div className="grid md:grid-cols-4 gap-6 mb-8">
@@ -443,6 +568,53 @@ export default function TeamDetailPage() {
             </Card>
           </div>
         </div>
+
+        <Dialog open={showLaunchDialog} onOpenChange={setShowLaunchDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Launch Team Token</DialogTitle>
+              <DialogDescription>
+                You are about to launch {team?.name} (${team?.symbol}) on Solana with a Meteora bonding curve.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-4">
+              <div className="p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+                <p className="text-sm text-yellow-500 font-semibold mb-2">⚠️ Important</p>
+                <ul className="text-sm text-muted-foreground space-y-1">
+                  <li>• This action is irreversible once confirmed on-chain</li>
+                  <li>• Token will be deployed with Meteora DBC bonding curve</li>
+                  <li>• Metadata will be uploaded to Supabase Storage</li>
+                  <li>• No transaction fees required from you (server-signed)</li>
+                </ul>
+              </div>
+
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Team Name:</span>
+                  <span className="font-semibold">{team?.name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Token Symbol:</span>
+                  <span className="font-semibold">${team?.symbol}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Network:</span>
+                  <span className="font-semibold">Solana Mainnet</span>
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowLaunchDialog(false)} disabled={launching}>
+                Cancel
+              </Button>
+              <Button onClick={handleLaunchToken} disabled={launching}>
+                {launching ? "Launching..." : "Confirm Launch"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   )
