@@ -72,7 +72,7 @@ NEXT_PUBLIC_SOLANA_NETWORK=mainnet-beta
 
 # RPC Endpoint (REQUIRED for mainnet token creation)
 # Public endpoints will return 403 errors
-NEXT_PUBLIC_SOLANA_RPC_URL=https://mainnet.helius-rpc.com/?api-key=YOUR_KEY
+NEXT_PUBLIC_SOLANA_RPC_URL=<YOUR_RPC_URL_HERE>
 
 # Meteora DBC Program ID
 NEXT_PUBLIC_METEORA_DBC_PROGRAM_ID=dbcij3LWUppWqq96dh6gJWwBifmcGfLSB5D4DuSMaqN
@@ -102,7 +102,7 @@ The fun-launch scaffold requires a paid RPC provider for token creation on mainn
 - Free tier available with rate limits
 - Sign up: https://helius.dev
 - Get your API key from the dashboard
-- Set: `NEXT_PUBLIC_SOLANA_RPC_URL=https://mainnet.helius-rpc.com/?api-key=YOUR_KEY`
+- Set: `NEXT_PUBLIC_SOLANA_RPC_URL=<YOUR_HELIUS_RPC_URL_WITH_API_KEY>`
 
 ### 2. QuickNode
 - Professional RPC infrastructure

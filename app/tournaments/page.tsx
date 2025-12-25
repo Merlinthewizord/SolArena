@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useRouter } from "next/router"
+import { useRouter } from "next/navigation"
 import { Navigation } from "@/components/navigation"
 import { ArenaWagerSection } from "./arena-wager-section"
 
