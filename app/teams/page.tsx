@@ -3,7 +3,7 @@
 import type React from "react"
 import { Navigation } from "@/components/navigation"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -46,7 +46,7 @@ export default function TeamsPage() {
   const [creating, setCreating] = useState(false)
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [logoPreview, setLogoPreview] = useState<string>("")
-  const supabase = createBrowserClient()
+  const supabase = useMemo(() => createBrowserClient(), [])
 
   const [formData, setFormData] = useState({
     name: "",
@@ -59,9 +59,20 @@ export default function TeamsPage() {
 
   useEffect(() => {
     fetchTeams()
-  }, [])
+  }, [supabase])
 
   const fetchTeams = async () => {
+    if (!supabase) {
+      console.error("[v0] Supabase client is not configured; skipping team fetch.")
+      toast({
+        title: "Service unavailable",
+        description: "Unable to load teams because Supabase is not configured.",
+        variant: "destructive",
+      })
+      setLoading(false)
+      return
+    }
+
     try {
       const { data, error } = await supabase.from("teams").select("*").order("created_at", { ascending: false })
 
@@ -91,6 +102,15 @@ export default function TeamsPage() {
 
   const handleCreateTeam = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (!supabase) {
+      toast({
+        title: "Service unavailable",
+        description: "Supabase is not configured. Please try again later.",
+        variant: "destructive",
+      })
+      return
+    }
 
     if (!connected || !profile) {
       toast({

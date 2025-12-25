@@ -1,9 +1,9 @@
 "use client"
 
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react"
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react"
 import { useToast } from "@/hooks/use-toast"
 import { ProfileSignupModal, type ProfileData } from "./profile-signup-modal"
-import { supabase } from "@/lib/supabase/client"
+import { createBrowserClient } from "@/lib/supabase/client"
 
 interface PhantomProvider {
   publicKey: { toString: () => string } | null
@@ -43,9 +43,20 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [showProfileModal, setShowProfileModal] = useState(false)
   const [profile, setProfile] = useState<any | null>(null)
   const { toast } = useToast()
+  const supabase = useMemo(() => createBrowserClient(), [])
+
+  const ensureSupabase = () => {
+    if (supabase) return supabase
+    toast({
+      title: "Service unavailable",
+      description: "Supabase is not configured. Please check environment variables and try again.",
+      variant: "destructive",
+    })
+    return null
+  }
 
   const refreshProfile = async () => {
-    if (!publicKey) return
+    if (!publicKey || !supabase) return
 
     const { data, error } = await supabase.from("player_profiles").select("*").eq("wallet_address", publicKey).single()
 
@@ -56,6 +67,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const checkExistingProfile = async () => {
+      if (!supabase) return
       const provider = getPhantomProvider()
       if (provider?.publicKey) {
         const walletAddress = provider.publicKey.toString()
@@ -138,7 +150,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }
 
   const createProfile = async (walletAddress: string, signature: string, profileData: ProfileData) => {
-    const { data, error } = await supabase
+    const client = ensureSupabase()
+    if (!client) throw new Error("Supabase is not configured")
+
+    const { data, error } = await client
       .from("player_profiles")
       .insert({
         wallet_address: walletAddress,
@@ -166,6 +181,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const handleProfileComplete = async (profileData: ProfileData) => {
     try {
+      const client = ensureSupabase()
+      if (!client) return
+
       const provider = getPhantomProvider()
       if (!provider) {
         throw new Error("Phantom wallet not found")
@@ -199,6 +217,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setConnecting(true)
 
     try {
+      const client = ensureSupabase()
+      if (!client) {
+        setConnecting(false)
+        return
+      }
       const provider = getPhantomProvider()
 
       if (!provider) {
@@ -214,7 +237,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       const walletAddress = await getWalletAddress(provider)
 
-      const { data: existingProfile, error } = await supabase
+      const { data: existingProfile, error } = await client
         .from("player_profiles")
         .select("*")
         .eq("wallet_address", walletAddress)

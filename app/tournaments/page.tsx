@@ -3,7 +3,7 @@
 import type React from "react"
 import { Navigation } from "@/components/navigation"
 
-import { useState, useEffect } from "react"
+import { useMemo, useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -50,6 +50,7 @@ export default function TournamentsPage() {
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [solanaProgram, setSolanaProgram] = useState<SolArenaProgram | null>(null)
   const [registering, setRegistering] = useState<string | null>(null)
+  const supabase = useMemo(() => createBrowserClient(), [])
 
   // Form state
   const [tournamentName, setTournamentName] = useState("")
@@ -227,7 +228,14 @@ export default function TournamentsPage() {
 
       console.log("[v0] Registration successful:", result)
 
-      const supabase = createBrowserClient()
+      if (!supabase) {
+        toast({
+          title: "Service unavailable",
+          description: "Supabase is not configured. Unable to save registration.",
+          variant: "destructive",
+        })
+        return
+      }
 
       // Get player profile
       const { data: profileData } = await supabase
@@ -320,9 +328,12 @@ export default function TournamentsPage() {
   }
 
   const fetchTournamentStats = async () => {
-    try {
-      const supabase = createBrowserClient()
+    if (!supabase) {
+      console.error("[v0] Supabase client is not configured; skipping stats fetch.")
+      return
+    }
 
+    try {
       // Get total unique players who have registered for any tournament
       const { data: players, error: playersError } = await supabase
         .from("tournament_participations")

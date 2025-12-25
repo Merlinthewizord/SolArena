@@ -1,18 +1,33 @@
 import { createClient } from "@supabase/supabase-js"
 
-const supabaseUrl = process.env.SUPABASE_URL
-const supabaseServiceRole = process.env.SUPABASE_SERVICE_ROLE_KEY
+let supabaseAdmin: ReturnType<typeof createClient> | null = null
+let loggedMissingEnv = false
 
-if (!supabaseUrl || !supabaseServiceRole) {
-  throw new Error("Missing Supabase environment variables for admin client")
+function getSupabaseAdmin() {
+  const supabaseUrl = process.env.SUPABASE_URL
+  const supabaseServiceRole = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!supabaseUrl || !supabaseServiceRole) {
+    if (!loggedMissingEnv) {
+      console.error("Missing Supabase environment variables for admin client")
+      loggedMissingEnv = true
+    }
+    return null
+  }
+
+  if (!supabaseAdmin) {
+    supabaseAdmin = createClient(supabaseUrl, supabaseServiceRole, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    })
+  }
+
+  return supabaseAdmin
 }
 
-export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRole, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false,
-  },
-})
+export { getSupabaseAdmin as supabaseAdmin }
 
 export async function recordAuditLog(params: {
   action: string
@@ -21,7 +36,12 @@ export async function recordAuditLog(params: {
   targetId: string
   payload?: any
 }) {
-  const { data, error } = await supabaseAdmin.from("admin_audit_log").insert({
+  const client = getSupabaseAdmin()
+  if (!client) {
+    return { data: null, error: new Error("Supabase admin client is not configured.") }
+  }
+
+  const { data, error } = await client.from("admin_audit_log").insert({
     action: params.action,
     actor_wallet: params.actorWallet,
     target_type: params.targetType,

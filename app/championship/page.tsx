@@ -7,8 +7,8 @@ import { Card } from "@/components/ui/card"
 import { Trophy, Calendar, MapPin, Users, Star, ArrowRight, Crown } from "lucide-react"
 import { useWallet } from "@/components/wallet-provider"
 import Link from "next/link"
-import { useState } from "react"
-import { createClient } from "@/lib/supabase/client"
+import { useMemo, useState } from "react"
+import { createBrowserClient } from "@/lib/supabase/client"
 import { VideoBackground } from "@/components/video-background"
 
 export default function ChampionshipPage() {
@@ -22,13 +22,18 @@ export default function ChampionshipPage() {
   })
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
+  const supabase = useMemo(() => createBrowserClient(), [])
 
   const handlePreRegister = async (e: React.FormEvent) => {
     e.preventDefault()
     setSubmitting(true)
 
     try {
-      const supabase = createClient()
+      if (!supabase) {
+        console.error("[v0] Supabase is not configured; skipping pre-registration submission.")
+        alert("Registration service is temporarily unavailable. Please try again later.")
+        return
+      }
 
       const registrationData = {
         email: preRegisterForm.email,
