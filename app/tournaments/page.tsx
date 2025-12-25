@@ -351,14 +351,23 @@ export default function TournamentsPage() {
     }
   }
 
-  const handleJoinTournament = (tournament: Tournament) => {
+  const handleJoinTournament = async (tournament: Tournament) => {
     if (tournament.status !== "completed" && !connected) {
-      toast({
-        title: "Wallet required",
-        description: "Connect your wallet to join this tournament",
-        variant: "destructive",
-      })
-      return
+      try {
+        await connect()
+      } catch (error) {
+        console.error("[v0] Wallet connect error:", error)
+      }
+
+      const provider = getProvider()
+      if (!provider?.publicKey) {
+        toast({
+          title: "Wallet required",
+          description: "Connect your wallet to join this tournament",
+          variant: "destructive",
+        })
+        return
+      }
     }
 
     openRegistrationForm(tournament)
@@ -492,6 +501,7 @@ export default function TournamentsPage() {
                 <Button
                   className="w-full bg-gradient-to-r from-primary to-orange-500 hover:opacity-90"
                   onClick={() => handleJoinTournament(tournament)}
+                  disabled={connecting}
                 >
                   <Trophy className="w-4 h-4 mr-2" />
                   {tournament.status === "completed" ? "View Results" : "Join Tournament"}
