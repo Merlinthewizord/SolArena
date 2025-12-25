@@ -31,18 +31,15 @@ interface Tournament {
     url: string
     state: string
   }
-  startDate: string
+  startDate: string | null
 }
 
 export default function TournamentsPage() {
-  const { publicKey, connected, connecting, connect, getProvider } = useWallet()
+  const { publicKey, connected, getProvider } = useWallet()
   const { toast } = useToast()
   const [tournaments, setTournaments] = useState<Tournament[]>([])
   const [isCreating, setIsCreating] = useState(false)
-  const [isJoining, setIsJoining] = useState(false)
-  const [isRegistering, setIsRegistering] = useState(false)
   const [selectedTournament, setSelectedTournament] = useState<Tournament | null>(null)
-  const [showJoinModal, setShowJoinModal] = useState(false)
   const [tournamentStats, setTournamentStats] = useState({
     totalPlayers: 0,
     totalPrizePool: 0,
@@ -67,6 +64,13 @@ export default function TournamentsPage() {
     discordHandle: "",
     teamName: "",
   })
+
+  const formatStartDate = (value?: string | null) => {
+    if (!value) return "Date TBA"
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return "Date TBA"
+    return date.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })
+  }
 
   useEffect(() => {
     const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com"
@@ -115,6 +119,9 @@ export default function TournamentsPage() {
         maxParticipants,
       })
 
+      const startDateTime =
+        tournamentDate && tournamentTime ? new Date(`${tournamentDate}T${tournamentTime}`).toISOString() : null
+
       const challongeResponse = await fetch("/api/tournaments", {
         method: "POST",
         headers: {
@@ -125,7 +132,7 @@ export default function TournamentsPage() {
           game: game,
           entryFee: Number.parseFloat(entryFee),
           maxParticipants: Number.parseInt(maxParticipants),
-          startDate: tournamentDate && tournamentTime ? `${tournamentDate}T${tournamentTime}` : undefined,
+          startDate: startDateTime ?? undefined,
           walletAddress: provider.publicKey.toString(),
         }),
       })
@@ -210,7 +217,13 @@ export default function TournamentsPage() {
       console.log("[v0] Registering for tournament:", tournamentId)
       console.log("[v0] Registration data:", registrationData)
 
-      const result = await solanaProgram.registerForTournament(provider, tournamentId)
+      toast({
+        title: "Approve SOL transfer",
+        description: `Confirm ${entryFeeSol} SOL transfer in your wallet to join the tournament.`,
+      })
+
+      const entryFeeLamports = Math.round(entryFeeSol * LAMPORTS_PER_SOL)
+      const result = await solanaProgram.registerForTournament(provider, tournamentId, entryFeeLamports)
 
       console.log("[v0] Registration successful:", result)
 
@@ -246,7 +259,9 @@ export default function TournamentsPage() {
 
       toast({
         title: "Registration successful!",
-        description: `You've joined the tournament. ${entryFeeSol} SOL has been deposited to the prize pool.`,
+        description: `You've joined the tournament. ${entryFeeSol} SOL has been deposited to the escrow program (${
+          result.escrowAddress ? `${result.escrowAddress.slice(0, 4)}...${result.escrowAddress.slice(-4)}` : "wallet"
+        }).`,
       })
 
       // Reset form and close modal
@@ -257,47 +272,6 @@ export default function TournamentsPage() {
       })
       setShowRegistrationForm(false)
       setSelectedTournament(null)
-
-      // Refresh tournaments to update participant count
-      fetchTournaments()
-    } catch (error) {
-      console.error("[v0] Error registering:", error)
-      toast({
-        title: "Registration failed",
-        description: error instanceof Error ? error.message : "Failed to register for tournament",
-        variant: "destructive",
-      })
-    } finally {
-      setRegistering(null)
-    }
-  }
-
-  const registerForTournament = async (tournamentId: string, entryFeeSol: number) => {
-    if (!connected || !solanaProgram) {
-      toast({
-        title: "Not ready",
-        description: "Please ensure your wallet is connected",
-        variant: "destructive",
-      })
-      return
-    }
-
-    setRegistering(tournamentId)
-
-    try {
-      const provider = getProvider()
-      if (!provider) throw new Error("Wallet provider not found")
-
-      console.log("[v0] Registering for tournament:", tournamentId)
-
-      const result = await solanaProgram.registerForTournament(provider, tournamentId)
-
-      console.log("[v0] Registration successful:", result)
-
-      toast({
-        title: "Registration successful!",
-        description: `You've joined the tournament. ${entryFeeSol} SOL has been deposited to the prize pool.`,
-      })
 
       // Refresh tournaments to update participant count
       fetchTournaments()
@@ -332,7 +306,7 @@ export default function TournamentsPage() {
         currentParticipants: t.currentParticipants, // Use camelCase from API
         status: t.status,
         challonge: t.challonge, // Use nested object directly from API
-        startDate: t.startDate,
+        startDate: t.startDate || t.start_time || t.created_at || null,
       }))
 
       setTournaments(transformedTournaments)
@@ -377,13 +351,17 @@ export default function TournamentsPage() {
     }
   }
 
-  const handleViewTournament = (tournament: Tournament) => {
+  const handleJoinTournament = (tournament: Tournament) => {
     if (tournament.status !== "completed" && !connected) {
-      alert("Please connect your wallet to join this tournament")
+      toast({
+        title: "Wallet required",
+        description: "Connect your wallet to join this tournament",
+        variant: "destructive",
+      })
       return
     }
-    // Implement logic to view tournament details or results
-    console.log("View tournament:", tournament)
+
+    openRegistrationForm(tournament)
   }
 
   return (
@@ -496,7 +474,7 @@ export default function TournamentsPage() {
                   </div>
                   <div className="flex items-center gap-1">
                     <Calendar className="w-4 h-4 text-muted-foreground" />
-                    <span>{new Date(tournament.startDate).toLocaleDateString()}</span>
+                    <span>{formatStartDate(tournament.startDate)}</span>
                   </div>
                 </div>
               </CardHeader>
@@ -513,7 +491,7 @@ export default function TournamentsPage() {
 
                 <Button
                   className="w-full bg-gradient-to-r from-primary to-orange-500 hover:opacity-90"
-                  onClick={() => handleViewTournament(tournament)}
+                  onClick={() => handleJoinTournament(tournament)}
                 >
                   <Trophy className="w-4 h-4 mr-2" />
                   {tournament.status === "completed" ? "View Results" : "Join Tournament"}
