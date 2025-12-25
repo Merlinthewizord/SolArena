@@ -216,6 +216,9 @@ export default function TournamentsPage() {
       const provider = getProvider()
       if (!provider) throw new Error("Wallet provider not found")
 
+      const tournamentUuid = selectedTournament.id
+      const challongeTournamentId = selectedTournament.challonge?.id || selectedTournament.id
+
       console.log("[v0] Registering for tournament:", tournamentId)
       console.log("[v0] Registration data:", registrationData)
 
@@ -247,9 +250,10 @@ export default function TournamentsPage() {
 
       if (profileData) {
         const { error: insertError } = await supabase.from("tournament_participations").insert({
+          tournament_uuid: tournamentUuid,
           player_id: profileData.id,
           wallet_address: provider.publicKey.toString(),
-          tournament_id: tournamentId,
+          tournament_id: challongeTournamentId,
           tournament_name: selectedTournament.name,
           game: selectedTournament.game,
           entry_fee: entryFeeSol,
