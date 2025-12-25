@@ -60,6 +60,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
         currentParticipants: participantCount,
         status: tournament.status,
         startDate: tournament.start_time,
+        bannerUrl: tournament.banner_url || null,
         challonge: challongeTournament
           ? {
               id: challongeTournament.tournament.id,

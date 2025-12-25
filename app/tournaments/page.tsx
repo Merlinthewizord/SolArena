@@ -27,6 +27,7 @@ interface Tournament {
   maxParticipants: number
   currentParticipants: number
   status: string
+  bannerUrl?: string | null
   challonge: {
     id: string
     url: string
@@ -60,6 +61,7 @@ export default function TournamentsPage() {
   const [tournamentDate, setTournamentDate] = useState("")
   const [tournamentTime, setTournamentTime] = useState("")
   const [maxParticipants, setMaxParticipants] = useState("32")
+  const [bannerImage, setBannerImage] = useState<string | null>(null)
 
   const [registrationData, setRegistrationData] = useState({
     inGameUsername: "",
@@ -86,6 +88,51 @@ export default function TournamentsPage() {
       console.log("[v0] SolArena program initialized with wallet:", publicKey?.toString())
     })
   }, [connected, publicKey])
+
+  const handleBannerUpload = async (file?: File | null) => {
+    if (!file) {
+      setBannerImage(null)
+      return
+    }
+
+    if (!file.type.startsWith("image/")) {
+      toast({
+        title: "Invalid file",
+        description: "Please upload a valid image file.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Please upload an image smaller than 5MB.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    const toBase64 = () =>
+      new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result as string)
+        reader.onerror = reject
+        reader.readAsDataURL(file)
+      })
+
+    try {
+      const base64 = await toBase64()
+      setBannerImage(base64)
+    } catch (error) {
+      console.error("[v0] Error reading banner file:", error)
+      toast({
+        title: "Upload failed",
+        description: "Could not read the selected image. Please try again.",
+        variant: "destructive",
+      })
+    }
+  }
 
   const createTournament = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -136,6 +183,7 @@ export default function TournamentsPage() {
           maxParticipants: Number.parseInt(maxParticipants),
           startDate: startDateTime ?? undefined,
           walletAddress: provider.publicKey.toString(),
+          bannerImage,
         }),
       })
 
@@ -173,6 +221,7 @@ export default function TournamentsPage() {
       setTournamentDate("")
       setTournamentTime("")
       setMaxParticipants("32")
+      setBannerImage(null)
       setShowCreateForm(false)
 
       // Refresh tournaments list
@@ -191,8 +240,8 @@ export default function TournamentsPage() {
   }
 
   const openRegistrationForm = (tournament: Tournament) => {
-    setSelectedTournament(tournament)
-    setShowRegistrationForm(true)
+      setSelectedTournament(tournament)
+      setShowRegistrationForm(true)
   }
 
   const submitRegistration = async (e: React.FormEvent) => {
@@ -277,6 +326,18 @@ export default function TournamentsPage() {
         }).`,
       })
 
+      setTournaments((prev) =>
+        prev.map((tournament) => {
+          if (tournament.id !== selectedTournament.id) return tournament
+          const updatedCount = (tournament.currentParticipants || 0) + 1
+          return {
+            ...tournament,
+            currentParticipants: updatedCount,
+            prizePool: Number.parseFloat((Number(tournament.entryFee) * updatedCount).toFixed(2)),
+          }
+        }),
+      )
+
       // Reset form and close modal
       setRegistrationData({
         inGameUsername: "",
@@ -303,7 +364,7 @@ export default function TournamentsPage() {
   const fetchTournaments = async () => {
     try {
       console.log("[v0] Fetching tournaments...")
-      const response = await fetch("/api/tournaments")
+      const response = await fetch("/api/tournaments", { cache: "no-store" })
       const data = await response.json()
       console.log("[v0] Tournaments fetched:", data)
 
@@ -319,6 +380,7 @@ export default function TournamentsPage() {
         currentParticipants: t.currentParticipants, // Use camelCase from API
         status: t.status,
         challonge: t.challonge, // Use nested object directly from API
+        bannerUrl: t.bannerUrl,
         startDate: t.startDate || t.start_time || t.created_at || null,
       }))
 
@@ -575,6 +637,7 @@ export default function TournamentsPage() {
                 setTournamentDate("")
                 setTournamentTime("")
                 setMaxParticipants("32")
+                setBannerImage(null)
               }}
               className="absolute top-4 right-4 p-2 hover:bg-muted rounded-lg transition-colors"
             >
@@ -614,6 +677,23 @@ export default function TournamentsPage() {
                     required
                   />
                   <p className="text-xs text-muted-foreground">What game will this tournament be for?</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="bannerImage">Banner Image</Label>
+                  <Input
+                    id="bannerImage"
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => handleBannerUpload(e.target.files?.[0] || null)}
+                  />
+                  <p className="text-xs text-muted-foreground">Upload an eye-catching banner (max 5MB).</p>
+                  {bannerImage && (
+                    <div className="relative h-32 w-full overflow-hidden rounded-lg border border-border">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={bannerImage} alt="Tournament banner preview" className="h-full w-full object-cover" />
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -733,6 +813,7 @@ export default function TournamentsPage() {
                     setTournamentDate("")
                     setTournamentTime("")
                     setMaxParticipants("32")
+                    setBannerImage(null)
                   }}
                 >
                   Cancel
