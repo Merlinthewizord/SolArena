@@ -11,8 +11,8 @@ export const ENTRY_FEE = 0.1 * LAMPORTS_PER_SOL // 0.1 SOL
 
 export interface Tournament {
   tournamentId: string
-  entryFee: number
-  totalPool: number
+  entryFee: number // lamports
+  totalPool: number // lamports
   participants: string[]
   isFinalized: boolean
 }
@@ -69,22 +69,47 @@ export class SolArenaProgram {
     }
   }
 
-  async registerForTournament(wallet: any, tournamentId: string) {
-    console.log("[v0] Registering for tournament:", tournamentId)
-
-    const tournament = this.tournaments.get(tournamentId)
-    if (!tournament) {
-      throw new Error("Tournament not found")
+  private async resolveEscrowDestination(tournamentId: string, fallback: PublicKey) {
+    if (this.programId.programId) {
+      const escrowPDA = deriveEscrowPda(this.programId.programId, tournamentId)
+      if (escrowPDA) {
+        const escrowInfo = await this.connection.getAccountInfo(escrowPDA)
+        if (escrowInfo) {
+          return { destination: escrowPDA, viaProgram: true }
+        }
+      }
+      // Fallback to program account if PDA not available yet
+      return { destination: this.programId.programId, viaProgram: true }
     }
 
-    // In production, you'd use a dedicated escrow PDA from the on-chain program
-    const transaction = new Transaction().add(
-      SystemProgram.transfer({
-        fromPubkey: wallet.publicKey,
-        toPubkey: wallet.publicKey, // Temporarily using same wallet for demo
-        lamports: ENTRY_FEE,
-      }),
-    )
+    return { destination: fallback, viaProgram: false }
+  }
+
+  async registerForTournament(wallet: any, tournamentId: string, entryFeeLamports: number = ENTRY_FEE) {
+    console.log("[v0] Registering for tournament:", tournamentId)
+
+    let tournament = this.tournaments.get(tournamentId)
+    if (!tournament) {
+      tournament = {
+        tournamentId,
+        entryFee: entryFeeLamports,
+        totalPool: 0,
+        participants: [],
+        isFinalized: false,
+      }
+      this.tournaments.set(tournamentId, tournament)
+    }
+
+    const { destination, viaProgram } = await this.resolveEscrowDestination(tournamentId, wallet.publicKey)
+
+    // In production, this would call the program; here we at least ensure the SOL moves into the escrow/program account
+    const transferIx = SystemProgram.transfer({
+      fromPubkey: wallet.publicKey,
+      toPubkey: destination,
+      lamports: entryFeeLamports,
+    })
+
+    const transaction = new Transaction().add(transferIx)
 
     // Get recent blockhash
     const { blockhash } = await this.connection.getLatestBlockhash()
@@ -98,11 +123,15 @@ export class SolArenaProgram {
 
     // Update tournament data
     tournament.participants.push(wallet.publicKey.toString())
-    tournament.totalPool += ENTRY_FEE
+    tournament.totalPool += entryFeeLamports
 
     console.log("[v0] Registration successful, signature:", signature)
 
-    return { signature }
+    return {
+      signature,
+      escrowAddress: destination.toBase58(),
+      depositedToProgram: viaProgram,
+    }
   }
 
   async finalizeTournament(
