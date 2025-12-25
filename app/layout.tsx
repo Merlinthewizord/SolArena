@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import { WalletProvider } from "@/components/wallet-provider"
 import { Toaster } from "@/components/ui/toaster"
+import { Footer } from "@/components/footer"
 import "./globals.css"
 
 const _geist = Geist({ subsets: ["latin"] })
@@ -42,6 +43,7 @@ export default function RootLayout({
       <body className={`font-sans antialiased`}>
         <WalletProvider>
           {children}
+          <Footer />
           <Toaster />
         </WalletProvider>
         <Analytics />

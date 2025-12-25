@@ -6,16 +6,9 @@ import { cookies } from "next/headers"
  * Always create a new client within each function when using it
  */
 export async function createClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-  if (!supabaseUrl || !supabaseAnonKey) {
-    throw new Error("Supabase server environment variables are not configured.")
-  }
-
   const cookieStore = await cookies()
 
-  return createServerClient(supabaseUrl, supabaseAnonKey, {
+  return createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
     cookies: {
       getAll() {
         return cookieStore.getAll()
@@ -31,3 +24,5 @@ export async function createClient() {
     },
   })
 }
+
+export { createClient as createServerClient }

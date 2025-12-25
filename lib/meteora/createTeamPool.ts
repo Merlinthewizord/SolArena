@@ -1,33 +1,38 @@
-import type { Connection, Keypair } from "@solana/web3.js"
+import type { Connection } from "@solana/web3.js"
 import { PublicKey, Keypair as SolanaKeypair } from "@solana/web3.js"
 import { DynamicBondingCurveClient } from "@meteora-ag/dynamic-bonding-curve-sdk"
 import { METEORA_DBC_PROGRAM_ID } from "../dbc-config"
 
 export interface CreateTeamPoolParams {
   connection: Connection
-  serverKeypair: Keypair
   poolConfigKey: PublicKey
   name: string
   symbol: string
   metadataUri: string
   teamId: string
+  userWallet: PublicKey
 }
 
 export interface CreateTeamPoolResult {
   mintAddress: string
   poolAddress: string
   bondingCurveAddress: string
-  txSignature: string
+  serializedTransaction: string
+  blockhash: string
+  lastValidBlockHeight: number
 }
 
 export async function createTeamPool(params: CreateTeamPoolParams): Promise<CreateTeamPoolResult> {
-  const { connection, serverKeypair, poolConfigKey, name, symbol, metadataUri, teamId } = params
+  const { connection, poolConfigKey, name, symbol, metadataUri, teamId, userWallet } = params
 
+  console.log("[Create Team Pool] Using RPC endpoint:", connection.rpcEndpoint)
   console.log("[Create Team Pool] Starting pool creation for team:", teamId)
   console.log("[Create Team Pool] Pool config:", poolConfigKey.toBase58())
+  console.log("[Create Team Pool] DBC Program ID:", METEORA_DBC_PROGRAM_ID.toBase58())
   console.log("[Create Team Pool] Token name:", name)
   console.log("[Create Team Pool] Token symbol:", symbol)
   console.log("[Create Team Pool] Metadata URI:", metadataUri)
+  console.log("[Create Team Pool] User wallet (payer):", userWallet.toBase58())
 
   const nameBytes = Buffer.byteLength(name, "utf8")
   const symbolBytes = Buffer.byteLength(symbol, "utf8")
@@ -50,11 +55,25 @@ export async function createTeamPool(params: CreateTeamPoolParams): Promise<Crea
     console.log("[Create Team Pool] Verifying pool config exists...")
     const poolConfig = await connection.getAccountInfo(poolConfigKey)
     if (!poolConfig) {
-      throw new Error(`Pool config not found at ${poolConfigKey.toBase58()}`)
+      throw new Error(
+        `Pool config account not found at ${poolConfigKey.toBase58()}. Please verify the DBC_CONFIG_ADDRESS is correct.`,
+      )
+    }
+
+    console.log("[Create Team Pool] Pool config found:")
+    console.log("  - Owner:", poolConfig.owner.toBase58())
+    console.log("  - Data length:", poolConfig.data.length, "bytes")
+    console.log("  - Lamports:", poolConfig.lamports)
+
+    if (!poolConfig.owner.equals(METEORA_DBC_PROGRAM_ID)) {
+      throw new Error(
+        `Pool config account is not owned by DBC program. Expected: ${METEORA_DBC_PROGRAM_ID.toBase58()}, Got: ${poolConfig.owner.toBase58()}`,
+      )
     }
 
     console.log("[Create Team Pool] Generating mint keypair...")
     const baseMintKeypair = SolanaKeypair.generate()
+    console.log("[Create Team Pool] Base mint:", baseMintKeypair.publicKey.toBase58())
 
     console.log("[Create Team Pool] Creating DBC pool...")
     const createPoolParam = {
@@ -63,41 +82,22 @@ export async function createTeamPool(params: CreateTeamPoolParams): Promise<Crea
       name,
       symbol,
       uri: metadataUri,
-      payer: serverKeypair.publicKey,
-      poolCreator: serverKeypair.publicKey,
+      payer: userWallet,
+      poolCreator: userWallet,
     }
 
-    console.log("[Create Team Pool] Building pool creation transaction...")
+    console.log("[Create Team Pool] Calling dbcClient.pool.createPool...")
     const poolTransaction = await dbcClient.pool.createPool(createPoolParam)
 
+    console.log("[Create Team Pool] Transaction created, setting blockhash and fee payer...")
     const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("finalized")
     poolTransaction.recentBlockhash = blockhash
-    poolTransaction.feePayer = serverKeypair.publicKey
+    poolTransaction.feePayer = userWallet
 
+    console.log("[Create Team Pool] Signing with mint keypair...")
     poolTransaction.partialSign(baseMintKeypair)
-    poolTransaction.partialSign(serverKeypair)
 
-    console.log("[Create Team Pool] Sending transaction...")
-    const signature = await connection.sendRawTransaction(poolTransaction.serialize(), {
-      skipPreflight: false,
-      maxRetries: 3,
-      preflightCommitment: "confirmed",
-    })
-
-    console.log("[Create Team Pool] Transaction sent, signature:", signature)
-    console.log("[Create Team Pool] Confirming transaction...")
-
-    await connection.confirmTransaction(
-      {
-        signature,
-        blockhash,
-        lastValidBlockHeight,
-      },
-      "confirmed",
-    )
-
-    console.log("[Create Team Pool] Transaction confirmed!")
-
+    console.log("[Create Team Pool] Deriving pool PDAs...")
     const [poolAddress] = PublicKey.findProgramAddressSync(
       [Buffer.from("virtual_pool"), poolConfigKey.toBuffer(), baseMintKeypair.publicKey.toBuffer()],
       METEORA_DBC_PROGRAM_ID,
@@ -108,20 +108,28 @@ export async function createTeamPool(params: CreateTeamPoolParams): Promise<Crea
       METEORA_DBC_PROGRAM_ID,
     )
 
-    console.log("[Create Team Pool] Pool created successfully!")
+    console.log("[Create Team Pool] Serializing transaction for user to sign...")
+    const serializedTx = poolTransaction.serialize({
+      requireAllSignatures: false,
+      verifySignatures: false,
+    })
+
+    console.log("[Create Team Pool] Pool creation transaction prepared successfully!")
     console.log("[Create Team Pool] Mint:", baseMintKeypair.publicKey.toBase58())
     console.log("[Create Team Pool] Pool:", poolAddress.toBase58())
     console.log("[Create Team Pool] Bonding Curve:", bondingCurveAddress.toBase58())
-    console.log("[Create Team Pool] Transaction:", signature)
 
     return {
       mintAddress: baseMintKeypair.publicKey.toBase58(),
       poolAddress: poolAddress.toBase58(),
       bondingCurveAddress: bondingCurveAddress.toBase58(),
-      txSignature: signature,
+      serializedTransaction: Buffer.from(serializedTx).toString("base64"),
+      blockhash,
+      lastValidBlockHeight,
     }
   } catch (error: any) {
     console.error("[Create Team Pool] Error:", error)
+    console.error("[Create Team Pool] Error stack:", error.stack)
     throw new Error(`Failed to create team pool: ${error.message || error}`)
   }
 }

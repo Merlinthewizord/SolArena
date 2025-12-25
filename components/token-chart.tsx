@@ -23,16 +23,23 @@ export function TokenChart({ poolAddress, bondingCurveAddress, tokenSymbol, toke
   const [refreshing, setRefreshing] = useState(false)
   const [buyAmount, setBuyAmount] = useState("")
   const [sellAmount, setSellAmount] = useState("")
+  const [error, setError] = useState<string | null>(null)
 
   const fetchPoolData = async () => {
     try {
       setRefreshing(true)
-      const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com"
+      setError(null)
+      const rpcUrl = "https://mainnet.helius-rpc.com/?api-key=e45878a7-25fb-4b1a-9f3f-3ed1d643b319"
       const connection = new Connection(rpcUrl, "confirmed")
       const state = await getPoolState(connection, poolAddress)
       setPoolState(state)
     } catch (error) {
       console.error("[Token Chart] Error fetching pool data:", error)
+      if (error instanceof Error) {
+        setError(error.message)
+      } else {
+        setError("Unable to fetch pool data. The token may not have been launched yet.")
+      }
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -41,7 +48,6 @@ export function TokenChart({ poolAddress, bondingCurveAddress, tokenSymbol, toke
 
   useEffect(() => {
     fetchPoolData()
-    // Refresh every 30 seconds
     const interval = setInterval(fetchPoolData, 30000)
     return () => clearInterval(interval)
   }, [poolAddress])
@@ -54,20 +60,30 @@ export function TokenChart({ poolAddress, bondingCurveAddress, tokenSymbol, toke
     )
   }
 
-  if (!poolState) {
+  if (error || !poolState) {
     return (
       <Card className="p-6">
-        <div className="text-center text-muted-foreground">Unable to load chart data</div>
+        <div className="text-center">
+          <div className="text-muted-foreground mb-2">{error || "Unable to load chart data"}</div>
+          <p className="text-sm text-muted-foreground">
+            {!poolState && !error && "The token pool has not been created yet. Launch your token to see trading data."}
+          </p>
+          {error && (
+            <Button size="sm" variant="outline" onClick={fetchPoolData} className="mt-4 bg-transparent">
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Retry
+            </Button>
+          )}
+        </div>
       </Card>
     )
   }
 
-  const priceChange = 0 // Would calculate from historical data
+  const priceChange = 0
   const isPositive = priceChange >= 0
 
   return (
     <div className="space-y-6">
-      {/* Price Header */}
       <Card className="p-6 bg-gradient-to-br from-card/80 to-primary/5 backdrop-blur border-2 border-primary/20">
         <div className="flex items-start justify-between mb-4">
           <div>
@@ -103,7 +119,6 @@ export function TokenChart({ poolAddress, bondingCurveAddress, tokenSymbol, toke
         </div>
       </Card>
 
-      {/* Bonding Curve Progress */}
       <Card className="p-6">
         <div className="flex items-center justify-between mb-3">
           <h4 className="font-semibold">Bonding Curve Progress</h4>
@@ -122,7 +137,6 @@ export function TokenChart({ poolAddress, bondingCurveAddress, tokenSymbol, toke
         </p>
       </Card>
 
-      {/* Trading Interface */}
       <Card className="p-6">
         <Tabs defaultValue="buy">
           <TabsList className="grid w-full grid-cols-2 mb-6">
@@ -218,7 +232,6 @@ export function TokenChart({ poolAddress, bondingCurveAddress, tokenSymbol, toke
         </Tabs>
       </Card>
 
-      {/* External Links */}
       <Card className="p-4 bg-muted/30">
         <div className="flex flex-wrap gap-2">
           <Button

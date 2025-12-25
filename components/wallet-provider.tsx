@@ -1,17 +1,17 @@
 "use client"
 
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react"
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react"
 import { useToast } from "@/hooks/use-toast"
 import { ProfileSignupModal, type ProfileData } from "./profile-signup-modal"
-import { createBrowserClient } from "@/lib/supabase/client"
+import { supabase } from "@/lib/supabase/client"
 
 interface PhantomProvider {
   publicKey: { toString: () => string } | null
-  connect: (options?: { onlyIfTrusted?: boolean }) => Promise<{ publicKey: { toString: () => string } }>
+  connect: () => Promise<{ publicKey: { toString: () => string } }>
   disconnect: () => Promise<void>
   signMessage: (message: Uint8Array) => Promise<{ signature: Uint8Array }>
+  signTransaction: (transaction: any) => Promise<any>
   isPhantom: boolean
-  isConnected?: boolean
 }
 
 interface WalletContextType {
@@ -23,6 +23,7 @@ interface WalletContextType {
   disconnect: () => Promise<void>
   getProvider: () => PhantomProvider | null
   refreshProfile: () => Promise<void>
+  signTransaction: ((transaction: any) => Promise<any>) | null
 }
 
 const WalletContext = createContext<WalletContextType>({
@@ -34,6 +35,7 @@ const WalletContext = createContext<WalletContextType>({
   disconnect: async () => {},
   getProvider: () => null,
   refreshProfile: async () => {},
+  signTransaction: null,
 })
 
 export function WalletProvider({ children }: { children: ReactNode }) {
@@ -43,20 +45,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [showProfileModal, setShowProfileModal] = useState(false)
   const [profile, setProfile] = useState<any | null>(null)
   const { toast } = useToast()
-  const supabase = useMemo(() => createBrowserClient(), [])
-
-  const ensureSupabase = () => {
-    if (supabase) return supabase
-    toast({
-      title: "Service unavailable",
-      description: "Supabase is not configured. Please check environment variables and try again.",
-      variant: "destructive",
-    })
-    return null
-  }
 
   const refreshProfile = async () => {
-    if (!publicKey || !supabase) return
+    if (!publicKey) return
 
     const { data, error } = await supabase.from("player_profiles").select("*").eq("wallet_address", publicKey).single()
 
@@ -67,7 +58,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const checkExistingProfile = async () => {
-      if (!supabase) return
       const provider = getPhantomProvider()
       if (provider?.publicKey) {
         const walletAddress = provider.publicKey.toString()
@@ -99,61 +89,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return null
   }
 
-  const mapWalletError = (error: unknown) => {
-    if (error && typeof error === "object" && "message" in error) {
-      const rawMessage = String((error as any).message)
-      const message = rawMessage.toLowerCase()
-      if (message.includes("rejected")) return "You rejected the connection request in Phantom."
-      if (message.includes("locked")) return "Unlock your Phantom wallet and try again."
-      if (message.includes("network")) return "Check your connection and try again."
-      if (message.includes("unexpected")) return "Phantom returned an unexpected error. Please retry after reopening your wallet."
-      if (message.includes("already") || message.includes("pending")) {
-        return "Phantom is still handling a previous request. Please try again."
-      }
-      return rawMessage
-    }
-    return "Failed to connect wallet"
-  }
-
-  const getWalletAddress = async (provider: PhantomProvider) => {
-    if (provider.publicKey) return provider.publicKey.toString()
-
-    const attemptConnection = async (options?: { onlyIfTrusted?: boolean }) => {
-      const response = await provider.connect(options)
-      return response.publicKey.toString()
-    }
-
-    try {
-      // Try a trusted connection first to reuse existing approvals
-      const walletAddress = await attemptConnection({ onlyIfTrusted: true })
-      if (walletAddress) return walletAddress
-    } catch (error) {
-      console.warn("[v0] Trusted Phantom connection failed, retrying with prompt:", error)
-    }
-
-    try {
-      return await attemptConnection()
-    } catch (error) {
-      const message = error && typeof error === "object" && "message" in error ? String((error as any).message) : ""
-
-      if (message.toLowerCase().includes("already") || message.toLowerCase().includes("pending")) {
-        try {
-          await provider.disconnect()
-        } catch (disconnectError) {
-          console.warn("[v0] Phantom disconnect during retry failed:", disconnectError)
-        }
-        return await attemptConnection()
-      }
-
-      throw error
-    }
-  }
-
   const createProfile = async (walletAddress: string, signature: string, profileData: ProfileData) => {
-    const client = ensureSupabase()
-    if (!client) throw new Error("Supabase is not configured")
-
-    const { data, error } = await client
+    const { data, error } = await supabase
       .from("player_profiles")
       .insert({
         wallet_address: walletAddress,
@@ -181,15 +118,18 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const handleProfileComplete = async (profileData: ProfileData) => {
     try {
-      const client = ensureSupabase()
-      if (!client) return
-
       const provider = getPhantomProvider()
       if (!provider) {
         throw new Error("Phantom wallet not found")
       }
 
-      const walletAddress = await getWalletAddress(provider)
+      let walletAddress: string
+      if (!provider.publicKey) {
+        const response = await provider.connect()
+        walletAddress = response.publicKey.toString()
+      } else {
+        walletAddress = provider.publicKey.toString()
+      }
 
       const message = `Sign this message to create your Sol Arena profile.\n\nWallet: ${walletAddress}\nUsername: ${profileData.username}\nTimestamp: ${new Date().toISOString()}`
       const encodedMessage = new TextEncoder().encode(message)
@@ -209,7 +149,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       })
     } catch (error) {
       console.error("[v0] Profile creation error:", error)
-      throw error instanceof Error ? error : new Error(mapWalletError(error))
+      throw error
     }
   }
 
@@ -217,11 +157,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setConnecting(true)
 
     try {
-      const client = ensureSupabase()
-      if (!client) {
-        setConnecting(false)
-        return
-      }
       const provider = getPhantomProvider()
 
       if (!provider) {
@@ -235,9 +170,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         return
       }
 
-      const walletAddress = await getWalletAddress(provider)
+      const response = await provider.connect()
+      const walletAddress = response.publicKey.toString()
 
-      const { data: existingProfile, error } = await client
+      const { data: existingProfile, error } = await supabase
         .from("player_profiles")
         .select("*")
         .eq("wallet_address", walletAddress)
@@ -256,10 +192,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }
     } catch (error) {
       console.error("[v0] Wallet connection error:", error)
-      const description = mapWalletError(error)
       toast({
         title: "Connection Failed",
-        description,
+        description: error instanceof Error ? error.message : "Failed to connect wallet",
         variant: "destructive",
       })
     } finally {
@@ -287,6 +222,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  const signTransaction = async (transaction: any) => {
+    const provider = getPhantomProvider()
+    if (!provider || !connected) {
+      throw new Error("Wallet not connected")
+    }
+    return provider.signTransaction(transaction)
+  }
+
   return (
     <WalletContext.Provider
       value={{
@@ -298,6 +241,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         disconnect,
         getProvider: getPhantomProvider,
         refreshProfile,
+        signTransaction: connected ? signTransaction : null,
       }}
     >
       {children}

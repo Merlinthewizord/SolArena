@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useWallet } from "@/components/wallet-provider"
 import { Navigation } from "@/components/navigation"
@@ -10,7 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Trophy, TrendingUp, Target, ArrowLeft, MapPin, Gamepad2, Calendar } from "lucide-react"
 import Link from "next/link"
-import { createBrowserClient } from "@/lib/supabase/client"
+import { supabase } from "@/lib/supabase/client"
 import { VideoBackground } from "@/components/video-background"
 
 export default function DashboardPage() {
@@ -18,8 +18,6 @@ export default function DashboardPage() {
   const router = useRouter()
   const [tournaments, setTournaments] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState<string | null>(null)
-  const supabase = useMemo(() => createBrowserClient(), [])
 
   useEffect(() => {
     if (!connected) {
@@ -29,13 +27,6 @@ export default function DashboardPage() {
 
     const fetchTournamentHistory = async () => {
       if (!profile?.wallet_address) return
-
-      if (!supabase) {
-        console.error("[v0] Supabase client is not configured; skipping tournament history fetch.")
-        setLoadError("Unable to load tournament history right now.")
-        setLoading(false)
-        return
-      }
 
       try {
         const { data, error } = await supabase
@@ -60,7 +51,7 @@ export default function DashboardPage() {
     }
 
     fetchTournamentHistory()
-  }, [connected, router, profile, supabase])
+  }, [connected, router, profile])
 
   if (!profile || !connected) {
     return null
@@ -186,8 +177,6 @@ export default function DashboardPage() {
 
           {loading ? (
             <div className="text-center py-8 text-muted-foreground">Loading tournament history...</div>
-          ) : loadError ? (
-            <div className="text-center py-8 text-muted-foreground">{loadError}</div>
           ) : tournaments.length > 0 ? (
             <div className="space-y-4">
               {tournaments.map((tournament) => (

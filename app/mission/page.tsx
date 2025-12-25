@@ -297,33 +297,7 @@ export default function MissionPage() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-border py-12 px-4 relative z-10">
-        <div className="container mx-auto max-w-6xl">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-            <Link href="/" className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                <Trophy className="w-5 h-5 text-primary-foreground" />
-              </div>
-              <span className="text-lg font-bold">Sol Arena</span>
-            </Link>
-            <div className="flex gap-6 text-sm text-muted-foreground">
-              <Link href="/mission" className="hover:text-foreground transition-colors">
-                Mission
-              </Link>
-              <Link href="/tournaments" className="hover:text-foreground transition-colors">
-                Tournaments
-              </Link>
-              <a href="#" className="hover:text-foreground transition-colors">
-                Terms
-              </a>
-              <a href="#" className="hover:text-foreground transition-colors">
-                Privacy
-              </a>
-            </div>
-            <div className="text-sm text-muted-foreground">© 2025 Sol Arena. All rights reserved.</div>
-          </div>
-        </div>
-      </footer>
+      {/* <Footer /> */}
     </div>
   )
 }

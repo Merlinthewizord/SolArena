@@ -14,7 +14,18 @@ export async function getPoolState(connection: Connection, poolAddress: string):
   try {
     const client = new DynamicBondingCurveClient(connection, "confirmed")
     const poolPubkey = new PublicKey(poolAddress)
+
+    const accountInfo = await connection.getAccountInfo(poolPubkey)
+
+    if (!accountInfo) {
+      throw new Error("Pool account does not exist on-chain. The pool may not have been created successfully.")
+    }
+
     const poolState = await client.state.getPool(poolPubkey)
+
+    if (!poolState) {
+      throw new Error("Pool not found. The token may not have been launched yet.")
+    }
 
     const quoteReserve = Number(poolState.quoteReserve) / 1e9 // Convert lamports to SOL
     const tokenReserve = Number(poolState.tokenReserve) / 1e9 // Convert to token decimals
@@ -49,6 +60,5 @@ export interface TradeData {
 export async function getRecentTrades(poolAddress: string, limit = 50): Promise<TradeData[]> {
   // In production, implement Bitquery GraphQL subscription
   // For now, return empty array
-  console.log("[DBC Pool Data] Trade history requires Bitquery API integration")
   return []
 }

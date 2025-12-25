@@ -24,6 +24,7 @@ export function Navigation() {
     { href: "/", label: "Home" },
     { href: "/tournaments", label: "Tournaments" },
     { href: "/teams", label: "Teams" },
+    { href: "/leaderboards", label: "Leaderboards" }, // Added Leaderboards navigation link
     { href: "/mission", label: "Mission" },
     { href: "/championship", label: "Championship" },
   ]

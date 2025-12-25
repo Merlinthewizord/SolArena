@@ -50,14 +50,6 @@ export async function GET() {
       const entryFee = dbTournament?.entry_fee_sol || 0.1
       const participantCount = ct.participants_count || 0
       const prizePool = entryFee * participantCount
-      const startTimeRaw =
-        dbTournament?.start_time ||
-        ct.start_at ||
-        ct.started_at ||
-        ct.start_time ||
-        ct.created_at ||
-        null
-      const startTime = startTimeRaw ? new Date(startTimeRaw).toISOString() : null
 
       return {
         id: dbTournament?.id || ct.id.toString(),
@@ -69,7 +61,6 @@ export async function GET() {
         currentParticipants: participantCount,
         status: dbTournament?.status || ct.state,
         created_at: dbTournament?.created_at || ct.created_at,
-        startDate: startTime,
         challonge: {
           id: ct.id.toString(),
           url: ct.full_challonge_url,
@@ -89,24 +80,11 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const {
-      name,
-      game,
-      entryFee,
-      entry_fee,
-      maxParticipants,
-      max_participants,
-      walletAddress,
-      wallet_address,
-      startDate,
-      start_time,
-    } = body
+    const { name, game, entryFee, entry_fee, maxParticipants, max_participants, walletAddress, wallet_address } = body
 
     const entryFeeSol = entryFee || entry_fee || 0.1
     const maxParts = maxParticipants || max_participants || 32
     const wallet = walletAddress || wallet_address
-    const startTimeInput = startDate || start_time
-    const startTime = startTimeInput ? new Date(startTimeInput).toISOString() : null
 
     if (!wallet) {
       console.error("[v0] Missing wallet address in request")
@@ -135,7 +113,6 @@ export async function POST(request: NextRequest) {
           description: `Entry Fee: ${entryFeeSol} SOL`,
           open_signup: true,
           hold_third_place_match: false,
-          start_at: startTime ?? undefined,
         },
       }),
     })
@@ -165,7 +142,6 @@ export async function POST(request: NextRequest) {
         max_participants: maxParts,
         status: "open",
         created_by_wallet: wallet,
-        start_time: startTime,
       })
       .select()
       .single()
@@ -178,15 +154,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Log audit trail
-    await supabase.from("admin_audit_log").insert({
-      actor_wallet: wallet,
-      action: "create_tournament",
-      target_type: "tournament",
-      target_id: tournament.id,
-      payload: { name, game, entryFeeSol, challongeId },
-    })
-
     console.log("[v0] Tournament created successfully:", tournament.id)
 
     return NextResponse.json({
@@ -197,7 +164,6 @@ export async function POST(request: NextRequest) {
         game: tournament.game,
         entryFee: Number.parseFloat(tournament.entry_fee_sol),
         status: tournament.status,
-        startDate: tournament.start_time,
       },
     })
   } catch (error) {

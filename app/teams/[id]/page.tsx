@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState, useEffect } from "react"
+import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -16,7 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Trophy, Users, ArrowLeft, Wallet, Coins, Target, Shield, Rocket, ExternalLink } from "lucide-react"
+import { Trophy, Users, ArrowLeft, Wallet, Coins, Target, Shield, Rocket, Loader2 } from "lucide-react"
 import { useWallet } from "@/components/wallet-provider"
 import Link from "next/link"
 import { createBrowserClient } from "@/lib/supabase/client"
@@ -24,6 +24,7 @@ import { VideoBackground } from "@/components/video-background"
 import { useToast } from "@/hooks/use-toast"
 import { Navigation } from "@/components/navigation"
 import { TokenChart } from "@/components/token-chart"
+import { Connection, Transaction, PublicKey } from "@solana/web3.js"
 
 interface Team {
   id: string
@@ -66,7 +67,7 @@ interface StakeInfo {
 export default function TeamDetailPage() {
   const params = useParams()
   const router = useRouter()
-  const { connected, profile, connect } = useWallet()
+  const { connected, profile, publicKey, signTransaction } = useWallet()
   const { toast } = useToast()
   const [team, setTeam] = useState<Team | null>(null)
   const [members, setMembers] = useState<TeamMember[]>([])
@@ -76,26 +77,15 @@ export default function TeamDetailPage() {
   const [staking, setStaking] = useState(false)
   const [showLaunchDialog, setShowLaunchDialog] = useState(false)
   const [launching, setLaunching] = useState(false)
-  const supabase = useMemo(() => createBrowserClient(), [])
+  const supabase = createBrowserClient()
 
   useEffect(() => {
     if (params.id) {
       fetchTeamData()
     }
-  }, [params.id, profile, supabase])
+  }, [params.id, profile])
 
   const fetchTeamData = async () => {
-    if (!supabase) {
-      console.error("[v0] Supabase client is not configured; unable to load team data.")
-      toast({
-        title: "Service unavailable",
-        description: "Supabase is not configured. Unable to load team details.",
-        variant: "destructive",
-      })
-      setLoading(false)
-      return
-    }
-
     try {
       // Fetch team details
       const { data: teamData, error: teamError } = await supabase.from("teams").select("*").eq("id", params.id).single()
@@ -138,10 +128,19 @@ export default function TeamDetailPage() {
   }
 
   const handleStake = async () => {
-    if (!connected || !profile || !team) {
+    if (!connected || !profile || !team || !publicKey || !signTransaction) {
       toast({
         title: "Wallet not connected",
         description: "Please connect your wallet to stake",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (!team.team_mint) {
+      toast({
+        title: "Token not launched",
+        description: "This team token hasn't been launched yet",
         variant: "destructive",
       })
       return
@@ -157,59 +156,68 @@ export default function TeamDetailPage() {
       return
     }
 
-    if (!supabase) {
-      toast({
-        title: "Service unavailable",
-        description: "Supabase is not configured. Please try again later.",
-        variant: "destructive",
-      })
-      return
-    }
-
     setStaking(true)
 
     try {
-      // Check if user already has a stake
-      if (stakeInfo) {
-        // Update existing stake
-        const { error } = await supabase
-          .from("team_token_stakes")
-          .update({
-            amount: stakeInfo.amount + amount,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("team_id", team.id)
-          .eq("staker_wallet", profile.wallet_address)
+      console.log("[v0] Starting Streamflow stake...")
 
-        if (error) throw error
-      } else {
-        // Create new stake
-        const { error } = await supabase.from("team_token_stakes").insert({
-          team_id: team.id,
-          staker_wallet: profile.wallet_address,
-          amount: amount,
-        })
+      // TODO: Implement actual Streamflow SDK integration
+      // For now, this is a placeholder that shows the integration flow
 
-        if (error) throw error
-      }
+      toast({
+        title: "Streamflow Integration Required",
+        description: "Please install @streamflow/staking package and complete the integration",
+        variant: "destructive",
+      })
 
-      // Update team total staked
-      const { error: teamError } = await supabase
-        .from("teams")
-        .update({
-          total_staked: (team.total_staked || 0) + amount,
-        })
-        .eq("id", team.id)
+      // The actual implementation would look like:
+      /*
+      import { StakingClient } from "@streamflow/staking"
+      
+      const client = new StakingClient({
+        clusterUrl: process.env.NEXT_PUBLIC_SOLANA_RPC_URL!,
+        cluster: "mainnet-beta"
+      })
 
-      if (teamError) throw teamError
+      // Get stake pool address
+      const stakePoolAddress = getTeamStakePoolAddress(
+        team.team_mint,
+        team.created_by,
+        0
+      )
+
+      // Convert amount to raw (accounting for decimals)
+      const rawAmount = toRawAmount(amount, 9) // assuming 9 decimals
+
+      // Stake for 30 days (in seconds)
+      const duration = new BN(30 * 24 * 60 * 60)
+
+      const { txId, stakeEntry } = await client.stake(
+        {
+          stakePool: stakePoolAddress.toString(),
+          amount: rawAmount,
+          duration: duration,
+          nonce: 0 // increment if user has multiple stakes
+        },
+        {
+          invoker: wallet // your wallet adapter instance
+        }
+      )
+
+      // Save to database
+      await supabase.from("team_token_stakes").insert({
+        team_id: team.id,
+        staker_wallet: profile.wallet_address,
+        amount: amount,
+        stake_entry_address: stakeEntry,
+        tx_signature: txId
+      })
 
       toast({
         title: "Staked successfully!",
-        description: `Staked ${amount} ${team.symbol} tokens`,
+        description: `Staked ${amount} ${team.symbol} tokens`
       })
-
-      setStakeAmount("")
-      fetchTeamData()
+      */
     } catch (error: any) {
       console.error("[v0] Error staking:", error)
       toast({
@@ -223,49 +231,145 @@ export default function TeamDetailPage() {
   }
 
   const handleLaunchToken = async () => {
-    if (!team || !profile) return
+    console.log("[v0] Launch button clicked", {
+      hasTeam: !!team,
+      hasProfile: !!profile,
+      hasPublicKey: !!publicKey,
+      hasSignTransaction: !!signTransaction,
+    })
+
+    if (!team || !profile || !publicKey || !signTransaction) {
+      console.error("[v0] Missing required data for launch", {
+        team: !!team,
+        profile: !!profile,
+        publicKey: !!publicKey,
+        signTransaction: !!signTransaction,
+      })
+      alert("Please connect your wallet and ensure you have a profile to launch a token.")
+      return
+    }
 
     setLaunching(true)
 
     try {
-      console.log("[v0] Launching team token via server API...")
+      console.log("[v0] Checking wallet balance...")
+      const connection = new Connection(
+        "https://mainnet.helius-rpc.com/?api-key=e45878a7-25fb-4b1a-9f3f-3ed1d643b319",
+        "confirmed",
+      )
+
+      const balance = await connection.getBalance(new PublicKey(publicKey))
+      const balanceInSol = balance / 1e9
+      const requiredSol = 0.02 // Minimum required: ~0.015 SOL + buffer
+
+      console.log(`[v0] Wallet balance: ${balanceInSol} SOL (need ~${requiredSol} SOL)`)
+
+      if (balance < requiredSol * 1e9) {
+        throw new Error(
+          `Insufficient SOL balance. You have ${balanceInSol.toFixed(4)} SOL but need at least ${requiredSol} SOL to create the token. Please add more SOL to your wallet.`,
+        )
+      }
+
+      console.log("[v0] Preparing team token launch...")
 
       const response = await fetch(`/api/teams/${team.id}/launch`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({}),
+        body: JSON.stringify({
+          walletAddress: publicKey,
+        }),
       })
 
       const result = await response.json()
 
       if (!response.ok) {
-        throw new Error(result.error || "Failed to launch token")
+        throw new Error(result.error || "Failed to prepare token launch")
       }
 
-      console.log("[v0] Token launched successfully:", result)
+      console.log("[v0] Transaction prepared, requesting user signature...")
+
+      const serializedTx = result.serializedTransaction
+      console.log("[v0] Serialized transaction received, length:", serializedTx.length)
+
+      const transaction = Transaction.from(Buffer.from(serializedTx, "base64"))
+      console.log("[v0] Transaction deserialized, requesting wallet signature...")
+
+      const estimatedFee = 0.015
+      console.log(`[v0] Estimated transaction cost: ${estimatedFee} SOL`)
+
+      const signedTransaction = await signTransaction(transaction)
+      console.log("[v0] Transaction signed by user")
+
+      console.log("[v0] Sending transaction to mainnet...")
+
+      const signature = await connection.sendRawTransaction(signedTransaction.serialize(), {
+        skipPreflight: false,
+        maxRetries: 3,
+      })
+
+      console.log("[v0] Transaction sent:", signature)
+      console.log("[v0] Confirming transaction...")
+
+      const confirmation = await connection.confirmTransaction(
+        {
+          signature,
+          blockhash: result.blockhash,
+          lastValidBlockHeight: result.lastValidBlockHeight,
+        },
+        "confirmed",
+      )
+
+      console.log("[v0] Transaction confirmed:", confirmation)
+
+      if (confirmation.value.err) {
+        throw new Error("Transaction failed on-chain")
+      }
+
+      console.log("[v0] Updating database with launch details...")
+      const updateResponse = await fetch(`/api/teams/${team.id}/launch`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          txSignature: signature,
+          mintAddress: result.mintAddress,
+          poolAddress: result.poolAddress,
+          bondingCurveAddress: result.bondingCurveAddress,
+          metadataUri: result.metadataUri,
+          logoUrl: team.logo_url,
+        }),
+      })
+
+      if (!updateResponse.ok) {
+        console.error("[v0] Failed to update database after launch")
+      }
 
       toast({
-        title: "Team token launched!",
-        description: `${team.name} ($${team.symbol}) is now live with Meteora bonding curve!`,
-        action: result.txSignature
-          ? {
-              label: "View Transaction",
-              onClick: () => {
-                window.open(`https://solscan.io/tx/${result.txSignature}`, "_blank")
-              },
-            }
-          : undefined,
+        title: "Team token launched successfully! 🚀",
+        description: `Transaction: ${signature.slice(0, 8)}...${signature.slice(-8)}`,
       })
 
       setShowLaunchDialog(false)
-      fetchTeamData()
+      window.location.reload()
     } catch (error: any) {
-      console.error("[v0] Error launching token:", error)
+      console.error("[v0] Token launch error:", error)
+
+      let errorMessage = error.message
+      if (errorMessage.includes("insufficient lamports")) {
+        const match = errorMessage.match(/insufficient lamports (\d+), need (\d+)/)
+        if (match) {
+          const have = Number.parseInt(match[1]) / 1e9
+          const need = Number.parseInt(match[2]) / 1e9
+          errorMessage = `Insufficient SOL balance. You have ${have.toFixed(4)} SOL but need ${need.toFixed(4)} SOL. Please add at least ${(need - have).toFixed(4)} SOL to your wallet.`
+        }
+      }
+
       toast({
-        title: "Error launching token",
-        description: error.message || "Failed to launch team token. Please try again.",
+        title: "Failed to launch token",
+        description: errorMessage,
         variant: "destructive",
       })
     } finally {
@@ -339,29 +443,6 @@ export default function TeamDetailPage() {
           </Card>
         )}
 
-        {team?.status === "live" && team.launch_tx && (
-          <Card className="p-4 mb-6 bg-card/50 backdrop-blur border-2 border-primary/20">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-sm">
-                <Badge variant="default" className="gap-1">
-                  <Shield className="w-3 h-3" />
-                  Live
-                </Badge>
-                <span className="text-muted-foreground">Token launched on-chain</span>
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => window.open(`https://solscan.io/tx/${team.launch_tx}`, "_blank")}
-                className="gap-2"
-              >
-                <ExternalLink className="w-4 h-4" />
-                View Launch TX
-              </Button>
-            </div>
-          </Card>
-        )}
-
         {/* Team Header */}
         <Card className="p-8 mb-8 bg-gradient-to-br from-card/80 to-secondary/30 backdrop-blur border-2 border-primary/20">
           <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
@@ -398,20 +479,18 @@ export default function TeamDetailPage() {
               </div>
             </div>
           </div>
-        </Card>
 
-        {/* Token Chart Section for live teams */}
-        {team?.status === "live" && team.pool_address && team.bonding_curve_address && (
-          <div className="mb-8">
-            <h2 className="text-3xl font-bold mb-6">Token Trading</h2>
-            <TokenChart
-              poolAddress={team.pool_address}
-              bondingCurveAddress={team.bonding_curve_address}
-              tokenSymbol={team.symbol}
-              tokenName={team.name}
-            />
-          </div>
-        )}
+          {team?.status === "live" && team.pool_address && team.bonding_curve_address && (
+            <div className="mt-8 pt-8 border-t border-border/50">
+              <TokenChart
+                poolAddress={team.pool_address}
+                bondingCurveAddress={team.bonding_curve_address}
+                tokenSymbol={team.symbol}
+                tokenName={team.name}
+              />
+            </div>
+          )}
+        </Card>
 
         {/* Stats Grid */}
         <div className="grid md:grid-cols-4 gap-6 mb-8">
@@ -605,7 +684,7 @@ export default function TeamDetailPage() {
                   <li>• This action is irreversible once confirmed on-chain</li>
                   <li>• Token will be deployed with Meteora DBC bonding curve</li>
                   <li>• Metadata will be uploaded to Supabase Storage</li>
-                  <li>• No transaction fees required from you (server-signed)</li>
+                  <li>• You will pay the transaction fees from your connected wallet (~0.01 SOL)</li>
                 </ul>
               </div>
 
@@ -629,8 +708,25 @@ export default function TeamDetailPage() {
               <Button variant="outline" onClick={() => setShowLaunchDialog(false)} disabled={launching}>
                 Cancel
               </Button>
-              <Button onClick={handleLaunchToken} disabled={launching}>
-                {launching ? "Launching..." : "Confirm Launch"}
+              <Button
+                onClick={() => {
+                  console.log("[v0] Confirm Launch button clicked")
+                  handleLaunchToken()
+                }}
+                disabled={launching || !publicKey}
+                className="gap-2"
+              >
+                {launching ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Launching...
+                  </>
+                ) : (
+                  <>
+                    <Rocket className="w-4 h-4" />
+                    Confirm Launch & Pay Gas
+                  </>
+                )}
               </Button>
             </DialogFooter>
           </DialogContent>

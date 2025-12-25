@@ -1,49 +1,27 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { Connection, PublicKey } from "@solana/web3.js"
-import { supabaseAdmin, recordAuditLog } from "@/lib/supabase/admin"
-import { getServerKeypair } from "@/lib/solana/serverKeypair"
+import { supabaseAdmin } from "@/lib/supabase/admin"
 import { createTeamPool } from "@/lib/meteora/createTeamPool"
+import { DBC_CONFIG_ADDRESS } from "@/lib/dbc-config"
 import { z } from "zod"
 
 const LaunchRequestSchema = z.object({
   walletSignature: z.string().optional(),
+  walletAddress: z.string(), // Added wallet address for payment
 })
 
 export async function POST(request: NextRequest, { params }: { params: { teamId: string } }) {
   try {
-    const adminClient = supabaseAdmin()
-    if (!adminClient) {
-      return NextResponse.json(
-        { error: "Supabase admin client is not configured. Cannot launch team token." },
-        { status: 500 },
-      )
-    }
-
     const teamId = params.teamId
     console.log("[Team Launch API] Received launch request for team:", teamId)
 
     const body = await request.json()
     const validatedBody = LaunchRequestSchema.parse(body)
 
-    const { data: team, error: fetchError } = await adminClient
-      .from("teams")
-      .select("*")
-      .eq("id", teamId)
-      .maybeSingle()
+    const { data: team, error: fetchError } = await supabaseAdmin.from("teams").select("*").eq("id", teamId).single()
 
-    if (fetchError) {
-      console.error("[Team Launch API] Error fetching team:", fetchError)
-      return NextResponse.json(
-        {
-          error: "Failed to fetch team data",
-          details: fetchError.message,
-        },
-        { status: 500 },
-      )
-    }
-
-    if (!team) {
-      console.error("[Team Launch API] Team not found with id:", teamId)
+    if (fetchError || !team) {
+      console.error("[Team Launch API] Team not found:", fetchError)
       return NextResponse.json({ error: "Team not found" }, { status: 404 })
     }
 
@@ -61,23 +39,49 @@ export async function POST(request: NextRequest, { params }: { params: { teamId:
 
     console.log("[Team Launch API] Creator wallet:", creatorWallet)
 
-    const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com"
-    const poolConfigKeyStr = process.env.POOL_CONFIG_KEY || process.env.NEXT_PUBLIC_DBC_CONFIG_ADDRESS
+    const rpcUrl =
+      process.env.SOLANA_MAINNET_RPC_URL ||
+      "https://mainnet.helius-rpc.com/?api-key=e45878a7-25fb-4b1a-9f3f-3ed1d643b319"
+    const poolConfigKey = DBC_CONFIG_ADDRESS
 
-    if (!poolConfigKeyStr) {
-      return NextResponse.json({ error: "Pool config key not configured" }, { status: 500 })
-    }
-
-    console.log("[Team Launch API] Using RPC:", rpcUrl)
-    console.log("[Team Launch API] Pool config:", poolConfigKeyStr)
+    console.log("[Team Launch API] Using MAINNET RPC for teams:", rpcUrl)
+    console.log("[Team Launch API] Pool config:", poolConfigKey.toBase58())
 
     const connection = new Connection(rpcUrl, "confirmed")
-    const serverKeypair = getServerKeypair()
-    const poolConfigKey = new PublicKey(poolConfigKeyStr)
+
+    try {
+      console.log("[Team Launch API] Verifying pool config account...")
+      const poolConfigAccount = await connection.getAccountInfo(poolConfigKey)
+
+      if (!poolConfigAccount) {
+        console.error("[Team Launch API] Pool config account does not exist:", poolConfigKey.toBase58())
+        return NextResponse.json(
+          {
+            error: "DBC pool configuration not found on blockchain. The config address may be invalid.",
+            configAddress: poolConfigKey.toBase58(),
+          },
+          { status: 500 },
+        )
+      }
+
+      console.log("[Team Launch API] Pool config account verified, owner:", poolConfigAccount.owner.toBase58())
+      console.log("[Team Launch API] Pool config data length:", poolConfigAccount.data.length)
+    } catch (configError: any) {
+      console.error("[Team Launch API] Pool config validation error:", configError)
+      return NextResponse.json(
+        {
+          error: `Failed to validate pool configuration: ${configError.message}`,
+          configAddress: poolConfigKey.toBase58(),
+        },
+        { status: 500 },
+      )
+    }
+
+    const userWallet = new PublicKey(validatedBody.walletAddress)
 
     let logoUrl = team.logo_url
     if (team.logo_url && team.logo_url.startsWith("data:")) {
-      console.log("[Team Launch API] Uploading logo to Supabase Storage...")
+      console.log("[Team Launch API] Uploading base64 logo to Supabase Storage...")
       try {
         const base64Match = team.logo_url.match(/^data:image\/(png|jpg|jpeg|gif|webp);base64,(.+)$/)
         if (!base64Match) {
@@ -90,7 +94,7 @@ export async function POST(request: NextRequest, { params }: { params: { teamId:
 
           const fileName = `team-logos/${teamId}-${Date.now()}.${imageType}`
 
-          const { data: uploadData, error: uploadError } = await adminClient.storage
+          const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
             .from("team-assets")
             .upload(fileName, buffer, {
               contentType: `image/${imageType}`,
@@ -99,16 +103,16 @@ export async function POST(request: NextRequest, { params }: { params: { teamId:
             })
 
           if (uploadError) {
-            console.error("[Team Launch API] Logo upload error:", uploadError)
+            console.error("[Team Launch API] Logo upload error:", uploadError.message)
             logoUrl = "https://arweave.net/placeholder-team-logo.png"
           } else {
-            const { data: publicUrlData } = adminClient.storage.from("team-assets").getPublicUrl(fileName)
+            const { data: publicUrlData } = supabaseAdmin.storage.from("team-assets").getPublicUrl(fileName)
             logoUrl = publicUrlData.publicUrl
-            console.log("[Team Launch API] Logo uploaded:", logoUrl)
+            console.log("[Team Launch API] Logo uploaded successfully:", logoUrl)
           }
         }
-      } catch (uploadErr) {
-        console.error("[Team Launch API] Logo upload exception:", uploadErr)
+      } catch (uploadErr: any) {
+        console.error("[Team Launch API] Logo upload exception:", uploadErr.message)
         logoUrl = "https://arweave.net/placeholder-team-logo.png"
       }
     }
@@ -135,7 +139,7 @@ export async function POST(request: NextRequest, { params }: { params: { teamId:
     }
 
     const metadataFileName = `team-metadata/${teamId}.json`
-    const { error: metadataError } = await adminClient.storage
+    const { error: metadataError } = await supabaseAdmin.storage
       .from("team-assets")
       .upload(metadataFileName, JSON.stringify(metadata, null, 2), {
         contentType: "application/json",
@@ -151,26 +155,79 @@ export async function POST(request: NextRequest, { params }: { params: { teamId:
 
     const poolResult = await createTeamPool({
       connection,
-      serverKeypair,
       poolConfigKey,
       name: team.name,
       symbol: team.symbol,
       metadataUri,
       teamId,
+      userWallet, // User wallet pays instead of server
     })
 
-    console.log("[Team Launch API] Pool created:", poolResult)
+    console.log("[Team Launch API] Pool transaction prepared")
 
-    const { data: updatedTeam, error: updateError } = await adminClient
+    return NextResponse.json({
+      success: true,
+      teamId,
+      serializedTransaction: poolResult.serializedTransaction,
+      mintAddress: poolResult.mintAddress,
+      poolAddress: poolResult.poolAddress,
+      bondingCurveAddress: poolResult.bondingCurveAddress,
+      metadataUri,
+      blockhash: poolResult.blockhash,
+      lastValidBlockHeight: poolResult.lastValidBlockHeight,
+    })
+  } catch (error: any) {
+    console.error("[Team Launch API] Error:", error)
+    return NextResponse.json(
+      {
+        error: error.message || "Failed to prepare team token launch",
+        details: error.toString(),
+      },
+      { status: 500 },
+    )
+  }
+}
+
+export async function PUT(request: NextRequest, { params }: { params: { teamId: string } }) {
+  try {
+    const teamId = params.teamId
+    const body = await request.json()
+
+    const { txSignature, mintAddress, poolAddress, bondingCurveAddress, metadataUri, logoUrl } = body
+
+    console.log("[Team Launch API] Confirming launch with signature:", txSignature)
+
+    const rpcUrl =
+      process.env.SOLANA_MAINNET_RPC_URL ||
+      "https://mainnet.helius-rpc.com/?api-key=e45878a7-25fb-4b1a-9f3f-3ed1d643b319"
+    const connection = new Connection(rpcUrl, "confirmed")
+
+    console.log("[Team Launch API] Verifying pool exists on-chain...")
+    const poolPubkey = new PublicKey(poolAddress)
+    const poolAccount = await connection.getAccountInfo(poolPubkey)
+
+    if (!poolAccount) {
+      console.error("[Team Launch API] Pool account does not exist on-chain:", poolAddress)
+      return NextResponse.json(
+        {
+          error: "Pool verification failed. The pool account was not found on-chain.",
+          poolAddress,
+        },
+        { status: 400 },
+      )
+    }
+
+    console.log("[Team Launch API] Pool verified on-chain, updating database...")
+
+    const { data: updatedTeam, error: updateError } = await supabaseAdmin
       .from("teams")
       .update({
-        team_mint: poolResult.mintAddress,
-        pool_address: poolResult.poolAddress,
-        bonding_curve_address: poolResult.bondingCurveAddress,
+        team_mint: mintAddress,
+        pool_address: poolAddress,
+        bonding_curve_address: bondingCurveAddress,
         metadata_uri: metadataUri,
-        dbc_config_address: poolConfigKeyStr,
         status: "live",
-        launch_tx: poolResult.txSignature,
+        launch_tx: txSignature,
         logo_url: logoUrl,
       })
       .eq("id", teamId)
@@ -182,37 +239,10 @@ export async function POST(request: NextRequest, { params }: { params: { teamId:
       return NextResponse.json({ error: "Failed to update team record" }, { status: 500 })
     }
 
-    await recordAuditLog({
-      action: "team_token_launched",
-      actorWallet: creatorWallet,
-      targetType: "team",
-      targetId: teamId,
-      payload: {
-        mintAddress: poolResult.mintAddress,
-        bondingCurveAddress: poolResult.bondingCurveAddress,
-        txSignature: poolResult.txSignature,
-      },
-    })
-
-    console.log("[Team Launch API] ✓ Launch completed successfully!")
-
-    return NextResponse.json({
-      success: true,
-      teamId,
-      teamMint: poolResult.mintAddress,
-      poolAddress: poolResult.poolAddress,
-      bondingCurveAddress: poolResult.bondingCurveAddress,
-      metadataUri,
-      txSignature: poolResult.txSignature,
-    })
+    console.log("[Team Launch API] Team successfully launched and verified")
+    return NextResponse.json({ success: true, team: updatedTeam })
   } catch (error: any) {
-    console.error("[Team Launch API] Error:", error)
-    return NextResponse.json(
-      {
-        error: error.message || "Failed to launch team token",
-        details: error.toString(),
-      },
-      { status: 500 },
-    )
+    console.error("[Team Launch API] Confirmation error:", error)
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }

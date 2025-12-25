@@ -1,18 +1,11 @@
 import { Connection, type PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL } from "@solana/web3.js"
-import {
-  deriveEscrowPda,
-  getSolanaRpcUrl,
-  getTournamentProgramId,
-  checkProgramDeployment,
-  type ProgramDeploymentStatus,
-} from "./solana/config"
 
 export const ENTRY_FEE = 0.1 * LAMPORTS_PER_SOL // 0.1 SOL
 
 export interface Tournament {
   tournamentId: string
-  entryFee: number // lamports
-  totalPool: number // lamports
+  entryFee: number
+  totalPool: number
   participants: string[]
   isFinalized: boolean
 }
@@ -20,26 +13,17 @@ export interface Tournament {
 export class SolArenaProgram {
   private connection: Connection
   private tournaments: Map<string, Tournament> = new Map()
-  private programId = getTournamentProgramId()
-  private programStatus: ProgramDeploymentStatus | null = null
 
-  constructor(rpcUrl = getSolanaRpcUrl()) {
+  constructor(rpcUrl = "https://api.devnet.solana.com") {
     this.connection = new Connection(rpcUrl, "confirmed")
   }
 
   async initialize(wallet: any) {
-    if (this.programId.programId) {
-      this.programStatus = await checkProgramDeployment(this.connection, this.programId.programId)
-      console.log("[v0] Tournament program status:", this.programStatus)
-    } else {
-      console.warn("[v0] Tournament program ID missing or invalid:", this.programId.error || this.programId.raw)
-    }
-
-    if (wallet?.publicKey) {
-      console.log("[v0] SolArena program initialized with wallet:", wallet.publicKey.toString())
-    } else {
+    if (!wallet || !wallet.publicKey) {
       console.log("[v0] SolArena program initialized without wallet")
+      return
     }
+    console.log("[v0] SolArena program initialized with wallet:", wallet.publicKey.toString())
   }
 
   async createTournament(wallet: any, tournamentId: string, entryFee: number = ENTRY_FEE) {
@@ -55,61 +39,29 @@ export class SolArenaProgram {
 
     this.tournaments.set(tournamentId, tournament)
 
-    const escrowPDA =
-      this.programId.programId && this.programStatus?.deployed
-        ? deriveEscrowPda(this.programId.programId, tournamentId)
-        : null
-
     return {
       signature: `simulated-create-${tournamentId}`,
       tournamentPDA: wallet.publicKey,
-      escrowPDA: escrowPDA ?? wallet.publicKey,
-      programId: this.programId.raw ?? null,
-      programReady: Boolean(this.programId.programId && this.programStatus?.deployed),
+      escrowPDA: wallet.publicKey,
     }
   }
 
-  private async resolveEscrowDestination(tournamentId: string, fallback: PublicKey) {
-    if (this.programId.programId) {
-      const escrowPDA = deriveEscrowPda(this.programId.programId, tournamentId)
-      if (escrowPDA) {
-        const escrowInfo = await this.connection.getAccountInfo(escrowPDA)
-        if (escrowInfo) {
-          return { destination: escrowPDA, viaProgram: true }
-        }
-      }
-      // Fallback to program account if PDA not available yet
-      return { destination: this.programId.programId, viaProgram: true }
-    }
-
-    return { destination: fallback, viaProgram: false }
-  }
-
-  async registerForTournament(wallet: any, tournamentId: string, entryFeeLamports: number = ENTRY_FEE) {
+  async registerForTournament(wallet: any, tournamentId: string) {
     console.log("[v0] Registering for tournament:", tournamentId)
 
-    let tournament = this.tournaments.get(tournamentId)
+    const tournament = this.tournaments.get(tournamentId)
     if (!tournament) {
-      tournament = {
-        tournamentId,
-        entryFee: entryFeeLamports,
-        totalPool: 0,
-        participants: [],
-        isFinalized: false,
-      }
-      this.tournaments.set(tournamentId, tournament)
+      throw new Error("Tournament not found")
     }
 
-    const { destination, viaProgram } = await this.resolveEscrowDestination(tournamentId, wallet.publicKey)
-
-    // In production, this would call the program; here we at least ensure the SOL moves into the escrow/program account
-    const transferIx = SystemProgram.transfer({
-      fromPubkey: wallet.publicKey,
-      toPubkey: destination,
-      lamports: entryFeeLamports,
-    })
-
-    const transaction = new Transaction().add(transferIx)
+    // In production, you'd use a dedicated escrow PDA from the on-chain program
+    const transaction = new Transaction().add(
+      SystemProgram.transfer({
+        fromPubkey: wallet.publicKey,
+        toPubkey: wallet.publicKey, // Temporarily using same wallet for demo
+        lamports: ENTRY_FEE,
+      }),
+    )
 
     // Get recent blockhash
     const { blockhash } = await this.connection.getLatestBlockhash()
@@ -123,15 +75,11 @@ export class SolArenaProgram {
 
     // Update tournament data
     tournament.participants.push(wallet.publicKey.toString())
-    tournament.totalPool += entryFeeLamports
+    tournament.totalPool += ENTRY_FEE
 
     console.log("[v0] Registration successful, signature:", signature)
 
-    return {
-      signature,
-      escrowAddress: destination.toBase58(),
-      depositedToProgram: viaProgram,
-    }
+    return { signature }
   }
 
   async finalizeTournament(
@@ -189,18 +137,6 @@ export class SolArenaProgram {
 
   async getTournamentData(tournamentId: string): Promise<Tournament | null> {
     return this.tournaments.get(tournamentId) || null
-  }
-
-  getProgramStatus() {
-    return {
-      configuredProgramId: this.programId.raw ?? null,
-      programIdValid: Boolean(this.programId.programId),
-      deploymentChecked: Boolean(this.programStatus),
-      deployedOnCluster: this.programStatus?.deployed ?? false,
-      lamports: this.programStatus?.lamports ?? 0,
-      owner: this.programStatus?.owner ?? null,
-      rpcUrl: (this.connection as any)._rpcEndpoint,
-    }
   }
 }
 

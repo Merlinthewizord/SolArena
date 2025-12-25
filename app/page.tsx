@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { Trophy, Wallet, Users, Zap, Shield, ArrowRight, Gamepad2 } from "lucide-react"
+import { Trophy, Wallet, Users, Zap, Shield, ArrowRight } from "lucide-react"
 import { useWallet } from "@/components/wallet-provider"
 import { VideoBackground } from "@/components/video-background"
 import Link from "next/link"
@@ -218,8 +218,8 @@ export default function Home() {
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
             <Card className="p-6 space-y-3 bg-card border-2 border-border hover:border-primary/50 transition-all hover:scale-105">
-              <div className="w-14 h-14 bg-primary/10 rounded-xl flex items-center justify-center">
-                <Gamepad2 className="w-7 h-7 text-primary" />
+              <div className="w-full h-32 rounded-xl overflow-hidden">
+                <img src="/fortnite-game-logo.webp" alt="Fortnite" className="w-full h-full object-cover" />
               </div>
               <div className="space-y-1">
                 <h3 className="text-xl font-bold">Fortnite</h3>
@@ -232,8 +232,8 @@ export default function Home() {
             </Card>
 
             <Card className="p-6 space-y-3 bg-card border-2 border-border hover:border-primary/50 transition-all hover:scale-105">
-              <div className="w-14 h-14 bg-primary/10 rounded-xl flex items-center justify-center">
-                <Gamepad2 className="w-7 h-7 text-primary" />
+              <div className="w-full h-32 rounded-xl overflow-hidden">
+                <img src="/the-finals-game-logo.jpg" alt="The Finals" className="w-full h-full object-cover" />
               </div>
               <div className="space-y-1">
                 <h3 className="text-xl font-bold">The Finals</h3>
@@ -246,8 +246,8 @@ export default function Home() {
             </Card>
 
             <Card className="p-6 space-y-3 bg-card border-2 border-border hover:border-primary/50 transition-all hover:scale-105">
-              <div className="w-14 h-14 bg-primary/10 rounded-xl flex items-center justify-center">
-                <Gamepad2 className="w-7 h-7 text-primary" />
+              <div className="w-full h-32 rounded-xl overflow-hidden">
+                <img src="/valorant-game-logo.png" alt="Valorant" className="w-full h-full object-cover" />
               </div>
               <div className="space-y-1">
                 <h3 className="text-xl font-bold">Valorant</h3>
@@ -260,8 +260,8 @@ export default function Home() {
             </Card>
 
             <Card className="p-6 space-y-3 bg-card border-2 border-border hover:border-primary/50 transition-all hover:scale-105">
-              <div className="w-14 h-14 bg-primary/10 rounded-xl flex items-center justify-center">
-                <Gamepad2 className="w-7 h-7 text-primary" />
+              <div className="w-full h-32 rounded-xl overflow-hidden">
+                <img src="/counter-strike-2-cs2-game-logo.jpg" alt="CS2" className="w-full h-full object-cover" />
               </div>
               <div className="space-y-1">
                 <h3 className="text-xl font-bold">CS2</h3>
@@ -274,8 +274,8 @@ export default function Home() {
             </Card>
 
             <Card className="p-6 space-y-3 bg-card border-2 border-border hover:border-primary/50 transition-all hover:scale-105">
-              <div className="w-14 h-14 bg-primary/10 rounded-xl flex items-center justify-center">
-                <Gamepad2 className="w-7 h-7 text-primary" />
+              <div className="w-full h-32 rounded-xl overflow-hidden">
+                <img src="/generic-game-logo.png" alt="League of Legends" className="w-full h-full object-cover" />
               </div>
               <div className="space-y-1">
                 <h3 className="text-xl font-bold">League of Legends</h3>
@@ -288,8 +288,8 @@ export default function Home() {
             </Card>
 
             <Card className="p-6 space-y-3 bg-card border-2 border-border hover:border-primary/50 transition-all hover:scale-105">
-              <div className="w-14 h-14 bg-primary/10 rounded-xl flex items-center justify-center">
-                <Gamepad2 className="w-7 h-7 text-primary" />
+              <div className="w-full h-32 rounded-xl overflow-hidden">
+                <img src="/dota-2-game-logo.jpg" alt="Dota 2" className="w-full h-full object-cover" />
               </div>
               <div className="space-y-1">
                 <h3 className="text-xl font-bold">Dota 2</h3>
@@ -302,8 +302,12 @@ export default function Home() {
             </Card>
 
             <Card className="p-6 space-y-3 bg-card border-2 border-border hover:border-primary/50 transition-all hover:scale-105">
-              <div className="w-14 h-14 bg-primary/10 rounded-xl flex items-center justify-center">
-                <Gamepad2 className="w-7 h-7 text-primary" />
+              <div className="w-full h-32 rounded-xl overflow-hidden">
+                <img
+                  src="/call-of-duty-warzone-game-logo.jpg"
+                  alt="Call of Duty"
+                  className="w-full h-full object-cover"
+                />
               </div>
               <div className="space-y-1">
                 <h3 className="text-xl font-bold">Call of Duty</h3>
@@ -316,8 +320,8 @@ export default function Home() {
             </Card>
 
             <Card className="p-6 space-y-3 bg-card border-2 border-border hover:border-primary/50 transition-all hover:scale-105">
-              <div className="w-14 h-14 bg-primary/10 rounded-xl flex items-center justify-center">
-                <Gamepad2 className="w-7 h-7 text-primary" />
+              <div className="w-full h-32 rounded-xl overflow-hidden">
+                <img src="/apex-legends-game-logo.jpg" alt="Apex Legends" className="w-full h-full object-cover" />
               </div>
               <div className="space-y-1">
                 <h3 className="text-xl font-bold">Apex Legends</h3>
@@ -329,7 +333,8 @@ export default function Home() {
               </div>
             </Card>
 
-            <Card className="p-6 space-y-3 bg-card border-2 border-border hover:border-primary/50 transition-all hover:scale-105">
+            {/* Additional cards for other games */}
+            {/* <Card className="p-6 space-y-3 bg-card border-2 border-border hover:border-primary/50 transition-all hover:scale-105">
               <div className="w-14 h-14 bg-primary/10 rounded-xl flex items-center justify-center">
                 <Gamepad2 className="w-7 h-7 text-primary" />
               </div>
@@ -383,7 +388,7 @@ export default function Home() {
                 <Users className="w-4 h-4" />
                 <span>Coming Soon</span>
               </div>
-            </Card>
+            </Card> */}
           </div>
         </div>
       </section>
@@ -557,41 +562,6 @@ export default function Home() {
           </Card>
         </div>
       </section>
-
-      {/* Footer */}
-      <footer className="border-t border-border py-12 px-4 relative z-10">
-        <div className="container mx-auto max-w-6xl">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                <Trophy className="w-5 h-5 text-primary-foreground" />
-              </div>
-              <span className="text-lg font-bold">Sol Arena</span>
-            </div>
-            <div className="flex gap-6 text-sm text-muted-foreground">
-              <Link href="/mission" className="hover:text-foreground transition-colors">
-                Mission
-              </Link>
-              <Link href="/championship" className="hover:text-foreground transition-colors">
-                Championship
-              </Link>
-              <a href="#" className="hover:text-foreground transition-colors">
-                About
-              </a>
-              <a href="#" className="hover:text-foreground transition-colors">
-                Terms
-              </a>
-              <a href="#" className="hover:text-foreground transition-colors">
-                Privacy
-              </a>
-              <a href="#" className="hover:text-foreground transition-colors">
-                Support
-              </a>
-            </div>
-            <div className="text-sm text-muted-foreground">© 2025 Sol Arena. All rights reserved.</div>
-          </div>
-        </div>
-      </footer>
     </div>
   )
 }
