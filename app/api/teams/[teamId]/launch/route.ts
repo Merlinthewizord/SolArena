@@ -11,13 +11,21 @@ const LaunchRequestSchema = z.object({
 
 export async function POST(request: NextRequest, { params }: { params: { teamId: string } }) {
   try {
+    const adminClient = supabaseAdmin()
+    if (!adminClient) {
+      return NextResponse.json(
+        { error: "Supabase admin client is not configured. Cannot launch team token." },
+        { status: 500 },
+      )
+    }
+
     const teamId = params.teamId
     console.log("[Team Launch API] Received launch request for team:", teamId)
 
     const body = await request.json()
     const validatedBody = LaunchRequestSchema.parse(body)
 
-    const { data: team, error: fetchError } = await supabaseAdmin
+    const { data: team, error: fetchError } = await adminClient
       .from("teams")
       .select("*")
       .eq("id", teamId)
@@ -82,7 +90,7 @@ export async function POST(request: NextRequest, { params }: { params: { teamId:
 
           const fileName = `team-logos/${teamId}-${Date.now()}.${imageType}`
 
-          const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
+          const { data: uploadData, error: uploadError } = await adminClient.storage
             .from("team-assets")
             .upload(fileName, buffer, {
               contentType: `image/${imageType}`,
@@ -94,7 +102,7 @@ export async function POST(request: NextRequest, { params }: { params: { teamId:
             console.error("[Team Launch API] Logo upload error:", uploadError)
             logoUrl = "https://arweave.net/placeholder-team-logo.png"
           } else {
-            const { data: publicUrlData } = supabaseAdmin.storage.from("team-assets").getPublicUrl(fileName)
+            const { data: publicUrlData } = adminClient.storage.from("team-assets").getPublicUrl(fileName)
             logoUrl = publicUrlData.publicUrl
             console.log("[Team Launch API] Logo uploaded:", logoUrl)
           }
@@ -127,7 +135,7 @@ export async function POST(request: NextRequest, { params }: { params: { teamId:
     }
 
     const metadataFileName = `team-metadata/${teamId}.json`
-    const { error: metadataError } = await supabaseAdmin.storage
+    const { error: metadataError } = await adminClient.storage
       .from("team-assets")
       .upload(metadataFileName, JSON.stringify(metadata, null, 2), {
         contentType: "application/json",
@@ -153,7 +161,7 @@ export async function POST(request: NextRequest, { params }: { params: { teamId:
 
     console.log("[Team Launch API] Pool created:", poolResult)
 
-    const { data: updatedTeam, error: updateError } = await supabaseAdmin
+    const { data: updatedTeam, error: updateError } = await adminClient
       .from("teams")
       .update({
         team_mint: poolResult.mintAddress,

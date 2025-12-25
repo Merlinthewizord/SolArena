@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useMemo, useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -76,15 +76,26 @@ export default function TeamDetailPage() {
   const [staking, setStaking] = useState(false)
   const [showLaunchDialog, setShowLaunchDialog] = useState(false)
   const [launching, setLaunching] = useState(false)
-  const supabase = createBrowserClient()
+  const supabase = useMemo(() => createBrowserClient(), [])
 
   useEffect(() => {
     if (params.id) {
       fetchTeamData()
     }
-  }, [params.id, profile])
+  }, [params.id, profile, supabase])
 
   const fetchTeamData = async () => {
+    if (!supabase) {
+      console.error("[v0] Supabase client is not configured; unable to load team data.")
+      toast({
+        title: "Service unavailable",
+        description: "Supabase is not configured. Unable to load team details.",
+        variant: "destructive",
+      })
+      setLoading(false)
+      return
+    }
+
     try {
       // Fetch team details
       const { data: teamData, error: teamError } = await supabase.from("teams").select("*").eq("id", params.id).single()
@@ -141,6 +152,15 @@ export default function TeamDetailPage() {
       toast({
         title: "Invalid amount",
         description: "Please enter a valid stake amount",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (!supabase) {
+      toast({
+        title: "Service unavailable",
+        description: "Supabase is not configured. Please try again later.",
         variant: "destructive",
       })
       return
