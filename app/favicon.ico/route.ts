@@ -1,5 +1,3 @@
-"use server"
-
 const svgIcon = `<?xml version="1.0" encoding="UTF-8"?>
 <svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
   <style>
