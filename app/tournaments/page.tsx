@@ -3,6 +3,7 @@
 import type React from "react"
 import { Navigation } from "@/components/navigation"
 
+import Link from "next/link"
 import { useMemo, useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -520,14 +521,19 @@ export default function TournamentsPage() {
                   <span className="font-bold text-green-500">{tournament.prizePool} SOL</span>
                 </div>
 
-                <Button
-                  className="w-full bg-gradient-to-r from-primary to-orange-500 hover:opacity-90"
-                  onClick={() => handleJoinTournament(tournament)}
-                  disabled={connecting}
-                >
-                  <Trophy className="w-4 h-4 mr-2" />
-                  {tournament.status === "completed" ? "View Results" : "Join Tournament"}
-                </Button>
+                <div className="flex flex-col gap-2">
+                  <Button
+                    className="w-full bg-gradient-to-r from-primary to-orange-500 hover:opacity-90"
+                    onClick={() => handleJoinTournament(tournament)}
+                    disabled={connecting}
+                  >
+                    <Trophy className="w-4 h-4 mr-2" />
+                    {tournament.status === "completed" ? "View Results" : "Join Tournament"}
+                  </Button>
+                  <Button variant="outline" className="w-full" asChild>
+                    <Link href={`/tournaments/${tournament.id}`}>View Event Page</Link>
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))}
