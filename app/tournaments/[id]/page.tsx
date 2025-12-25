@@ -21,6 +21,7 @@ interface TournamentDetail {
   currentParticipants: number
   status: string
   startDate: string | null
+  bannerUrl?: string | null
   challonge?: {
     id: string
     url: string
@@ -133,7 +134,7 @@ export default function TournamentProfilePage() {
     const loadTournament = async () => {
       setLoading(true)
       try {
-        const response = await fetch(`/api/tournaments/${tournamentId}`)
+        const response = await fetch(`/api/tournaments/${tournamentId}`, { cache: "no-store" })
 
         if (!response.ok) {
           const data = await response.json()
@@ -196,7 +197,13 @@ export default function TournamentProfilePage() {
           <div className="space-y-10">
             <section className="relative overflow-hidden rounded-2xl border border-border shadow-lg">
               <div className="absolute inset-0">
-                <Image src="/placeholder.jpg" alt="Tournament banner" fill className="object-cover" priority />
+                <Image
+                  src={tournament.bannerUrl || "/placeholder.jpg"}
+                  alt="Tournament banner"
+                  fill
+                  className="object-cover"
+                  priority
+                />
                 <div className="absolute inset-0 bg-gradient-to-r from-background/90 via-background/70 to-background/10" />
               </div>
 

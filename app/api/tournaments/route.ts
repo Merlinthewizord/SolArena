@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { supabaseAdmin } from "@/lib/supabase/admin"
 
 const CHALLONGE_API_KEY = process.env.CHALLONGE_API_KEY || "4f3911421ecd87e06a5395d8c77c75e95526b36f9b8f256b"
 const CHALLONGE_API_URL = "https://api.challonge.com/v1"
@@ -19,6 +20,20 @@ export async function GET() {
       console.error("[v0] Database error fetching tournaments:", dbError)
       return NextResponse.json({ error: "Database error", tournaments: [] }, { status: 500 })
     }
+
+    const { data: participationRows, error: participationError } = await supabase
+      .from("tournament_participations")
+      .select("tournament_uuid")
+
+    if (participationError) {
+      console.error("[v0] Database error fetching participant counts:", participationError)
+    }
+
+    const participationCounts: Record<string, number> = {}
+    participationRows?.forEach((row) => {
+      if (!row.tournament_uuid) return
+      participationCounts[row.tournament_uuid] = (participationCounts[row.tournament_uuid] || 0) + 1
+    })
 
     console.log("[v0] Found", dbTournaments?.length || 0, "tournaments in database")
 
@@ -48,8 +63,8 @@ export async function GET() {
       const dbTournament = (dbTournaments || []).find((dbt) => dbt.challonge_id === ct.id.toString())
 
       const entryFee = dbTournament?.entry_fee_sol || 0.1
-      const participantCount = ct.participants_count || 0
-      const prizePool = entryFee * participantCount
+      const participantCount = participationCounts[dbTournament?.id || ""] ?? ct.participants_count ?? 0
+      const prizePool = Number.parseFloat((Number(entryFee) * participantCount).toFixed(2))
       const startTimeRaw =
         dbTournament?.start_time ||
         ct.start_at ||
@@ -68,6 +83,7 @@ export async function GET() {
         maxParticipants: dbTournament?.max_participants || 32,
         currentParticipants: participantCount,
         status: dbTournament?.status || ct.state,
+        bannerUrl: dbTournament?.banner_url || null,
         created_at: dbTournament?.created_at || ct.created_at,
         startDate: startTime,
         challonge: {
@@ -94,6 +110,7 @@ export async function POST(request: NextRequest) {
       game,
       entryFee,
       entry_fee,
+      bannerImage,
       maxParticipants,
       max_participants,
       walletAddress,
@@ -166,6 +183,7 @@ export async function POST(request: NextRequest) {
         status: "open",
         created_by_wallet: wallet,
         start_time: startTime,
+        banner_url: null,
       })
       .select()
       .single()
@@ -189,6 +207,51 @@ export async function POST(request: NextRequest) {
 
     console.log("[v0] Tournament created successfully:", tournament.id)
 
+    let bannerUrl: string | null = null
+    const adminClient = supabaseAdmin()
+
+    if (bannerImage && typeof bannerImage === "string" && adminClient) {
+      try {
+        const base64Match = bannerImage.match(/^data:image\\/(png|jpg|jpeg|gif|webp);base64,(.+)$/)
+        if (!base64Match) {
+          console.warn("[v0] Banner image provided but format is invalid")
+        } else {
+          const imageType = base64Match[1]
+          const base64Data = base64Match[2]
+          const buffer = Buffer.from(base64Data, "base64")
+          const fileName = `tournament-banners/${tournament.id}-${Date.now()}.${imageType}`
+
+          const { error: uploadError } = await adminClient.storage
+            .from("team-assets")
+            .upload(fileName, buffer, {
+              contentType: `image/${imageType}`,
+              upsert: true,
+              cacheControl: "3600",
+            })
+
+          if (uploadError) {
+            console.error("[v0] Banner upload error:", uploadError)
+          } else {
+            const { data: publicUrlData } = adminClient.storage.from("team-assets").getPublicUrl(fileName)
+            bannerUrl = publicUrlData.publicUrl
+
+            const { error: updateError } = await adminClient
+              .from("tournaments")
+              .update({ banner_url: bannerUrl })
+              .eq("id", tournament.id)
+
+            if (updateError) {
+              console.error("[v0] Failed to persist banner URL:", updateError)
+            }
+          }
+        }
+      } catch (uploadError) {
+        console.error("[v0] Banner upload exception:", uploadError)
+      }
+    } else if (bannerImage && !adminClient) {
+      console.warn("[v0] Banner image provided but Supabase admin client is not configured.")
+    }
+
     return NextResponse.json({
       tournament: {
         id: tournament.id,
@@ -198,6 +261,7 @@ export async function POST(request: NextRequest) {
         entryFee: Number.parseFloat(tournament.entry_fee_sol),
         status: tournament.status,
         startDate: tournament.start_time,
+        bannerUrl: bannerUrl || tournament.banner_url || null,
       },
     })
   } catch (error) {
