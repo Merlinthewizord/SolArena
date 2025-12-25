@@ -2,7 +2,7 @@ import { createBrowserClient as createSupabaseClient } from "@supabase/ssr"
 
 type BrowserClient = ReturnType<typeof createSupabaseClient>
 
-let supabase: BrowserClient | null = null
+let supabaseInstance: BrowserClient | null = null
 let loggedMissingEnv = false
 
 function getSupabaseEnv() {
@@ -26,11 +26,11 @@ export function getSupabaseBrowserClient(): BrowserClient | null {
   const env = getSupabaseEnv()
   if (!env) return null
 
-  if (!supabase) {
-    supabase = createSupabaseClient(env.supabaseUrl, env.supabaseAnonKey)
+  if (!supabaseInstance) {
+    supabaseInstance = createSupabaseClient(env.supabaseUrl, env.supabaseAnonKey)
   }
 
-  return supabase
+  return supabaseInstance
 }
 
 // Export legacy helpers
