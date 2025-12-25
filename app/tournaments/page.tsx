@@ -35,7 +35,7 @@ interface Tournament {
 }
 
 export default function TournamentsPage() {
-  const { publicKey, connected, getProvider } = useWallet()
+  const { publicKey, connected, connecting, connect, getProvider } = useWallet()
   const { toast } = useToast()
   const [tournaments, setTournaments] = useState<Tournament[]>([])
   const [isCreating, setIsCreating] = useState(false)
