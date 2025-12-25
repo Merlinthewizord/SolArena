@@ -352,6 +352,8 @@ export default function TournamentsPage() {
   }
 
   const handleJoinTournament = async (tournament: Tournament) => {
+    if (connecting) return
+
     if (tournament.status !== "completed" && !connected) {
       try {
         await connect()
@@ -360,6 +362,15 @@ export default function TournamentsPage() {
       }
 
       const provider = getProvider()
+
+      if (provider && !provider.publicKey) {
+        try {
+          await provider.connect()
+        } catch (error) {
+          console.error("[v0] Phantom connect error:", error)
+        }
+      }
+
       if (!provider?.publicKey) {
         toast({
           title: "Wallet required",
