@@ -1,6 +1,7 @@
 "use client"
 
 import type React from "react"
+import { useRouter } from "next/router"
 import { Navigation } from "@/components/navigation"
 import { ArenaWagerSection } from "./arena-wager-section"
 
@@ -53,6 +54,7 @@ export default function TournamentsPage() {
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [solanaProgram, setSolanaProgram] = useState<SolArenaProgram | null>(null)
   const [registering, setRegistering] = useState<string | null>(null)
+  const router = useRouter()
 
   // Form state
   const [tournamentName, setTournamentName] = useState("")
@@ -114,6 +116,34 @@ export default function TournamentsPage() {
         maxParticipants,
       })
 
+      let onChainSignature = null
+      const tournamentIdForOnChain = `tournament-${Date.now()}`
+
+      if (solanaProgram) {
+        try {
+          console.log("[v0] Creating tournament on-chain first...")
+          const entryFeeInLamports = Number.parseFloat(entryFee) * LAMPORTS_PER_SOL
+          const result = await solanaProgram.createTournament(provider, tournamentIdForOnChain, entryFeeInLamports)
+          onChainSignature = result.signature
+          console.log("[v0] On-chain tournament created:", result)
+
+          toast({
+            title: "On-chain creation successful",
+            description: `Tournament escrow created on Solana`,
+          })
+        } catch (blockchainError) {
+          console.error("[v0] Blockchain error:", blockchainError)
+          toast({
+            title: "On-chain creation failed",
+            description: "Could not create tournament on blockchain. Please try again.",
+            variant: "destructive",
+          })
+          setIsCreating(false)
+          return
+        }
+      }
+
+      // Now create on Challonge
       const challongeResponse = await fetch("/api/tournaments", {
         method: "POST",
         headers: {
@@ -126,6 +156,7 @@ export default function TournamentsPage() {
           maxParticipants: Number.parseInt(maxParticipants),
           startDate: tournamentDate && tournamentTime ? `${tournamentDate}T${tournamentTime}` : undefined,
           walletAddress: provider.publicKey.toString(),
+          onChainTxSignature: onChainSignature,
         }),
       })
 
@@ -136,20 +167,6 @@ export default function TournamentsPage() {
 
       const challongeData = await challongeResponse.json()
       console.log("[v0] Tournament created successfully:", challongeData)
-
-      if (solanaProgram) {
-        try {
-          const entryFeeInLamports = Number.parseFloat(entryFee) * LAMPORTS_PER_SOL
-          const result = await solanaProgram.createTournament(
-            provider,
-            challongeData.tournament.challonge_id,
-            entryFeeInLamports,
-          )
-          console.log("[v0] On-chain tournament created:", result)
-        } catch (blockchainError) {
-          console.error("[v0] Blockchain error (non-critical):", blockchainError)
-        }
-      }
 
       toast({
         title: "Tournament created!",
@@ -381,8 +398,7 @@ export default function TournamentsPage() {
       alert("Please connect your wallet to join this tournament")
       return
     }
-    // Implement logic to view tournament details or results
-    console.log("View tournament:", tournament)
+    router.push(`/tournaments/${tournament.id}`)
   }
 
   return (

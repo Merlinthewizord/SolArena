@@ -5,10 +5,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   try {
     const { id } = await params
     const body = await request.json()
-    const { walletAddress, inGameUsername, discordHandle, teamId } = body
+    const { walletAddress, inGameUsername, discordHandle, teamId, transactionSignature } = body
 
     if (!walletAddress) {
       return NextResponse.json({ error: "Wallet address required" }, { status: 401 })
+    }
+
+    if (transactionSignature) {
+      console.log("[v0] Tournament join with on-chain payment:", transactionSignature)
     }
 
     const supabase = await createClient()
@@ -66,6 +70,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         discord_handle: discordHandle || null,
         team_name: teamId || null,
         status: "registered",
+        payment_signature: transactionSignature || null,
       })
       .select()
       .single()

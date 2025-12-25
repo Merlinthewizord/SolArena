@@ -61,6 +61,7 @@ export async function GET() {
         currentParticipants: participantCount,
         status: dbTournament?.status || ct.state,
         created_at: dbTournament?.created_at || ct.created_at,
+        startDate: dbTournament?.start_time || dbTournament?.created_at || ct.created_at,
         challonge: {
           id: ct.id.toString(),
           url: ct.full_challonge_url,
@@ -80,7 +81,17 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { name, game, entryFee, entry_fee, maxParticipants, max_participants, walletAddress, wallet_address } = body
+    const {
+      name,
+      game,
+      entryFee,
+      entry_fee,
+      maxParticipants,
+      max_participants,
+      walletAddress,
+      wallet_address,
+      onChainTxSignature,
+    } = body
 
     const entryFeeSol = entryFee || entry_fee || 0.1
     const maxParts = maxParticipants || max_participants || 32
@@ -142,6 +153,7 @@ export async function POST(request: NextRequest) {
         max_participants: maxParts,
         status: "open",
         created_by_wallet: wallet,
+        onchain_tx_signature: onChainTxSignature || null,
       })
       .select()
       .single()
