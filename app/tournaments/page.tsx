@@ -217,6 +217,9 @@ export default function TournamentsPage() {
       if (!provider) throw new Error("Wallet provider not found")
 
       const tournamentUuid = selectedTournament.id
+      const hasValidTournamentUuid =
+        typeof tournamentUuid === "string" &&
+        /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(tournamentUuid)
       const challongeTournamentId = selectedTournament.challonge?.id || selectedTournament.id
 
       console.log("[v0] Registering for tournament:", tournamentId)
@@ -249,8 +252,7 @@ export default function TournamentsPage() {
         .single()
 
       if (profileData) {
-        const { error: insertError } = await supabase.from("tournament_participations").insert({
-          tournament_uuid: tournamentUuid,
+        const participationData: Record<string, any> = {
           player_id: profileData.id,
           wallet_address: provider.publicKey.toString(),
           tournament_id: challongeTournamentId,
@@ -261,7 +263,18 @@ export default function TournamentsPage() {
           discord_handle: registrationData.discordHandle || null,
           team_name: registrationData.teamName || null,
           status: "registered",
-        })
+        }
+
+        if (hasValidTournamentUuid) {
+          participationData.tournament_uuid = tournamentUuid
+        } else {
+          console.warn("[v0] Skipping tournament_uuid insert; no valid DB UUID available", {
+            tournamentUuid,
+            challongeTournamentId,
+          })
+        }
+
+        const { error: insertError } = await supabase.from("tournament_participations").insert(participationData)
 
         if (insertError) {
           console.error("[v0] Error saving registration to database:", insertError)
